@@ -124,24 +124,6 @@ class MapCardCreator {
                             </button>
                         </div>
                         <div id="import-status-msg" style="display: none; font-size: 0.75rem; margin-top: 0.4rem; font-weight: 500; transition: color 0.2s;"></div>
-                        
-                        <!-- GAS Settings Toggle -->
-                        <div class="gas-settings-toggle" style="margin-top: 0.5rem; text-align: right;">
-                            <a href="#" id="gas-toggle-link" style="font-size: 0.7rem; color: var(--text-muted, #7f8c8d); text-decoration: none; display: inline-flex; align-items: center; gap: 0.2rem;">
-                                ⚙️ ${this.getTranslation('gas_settings_lbl')}
-                            </a>
-                        </div>
-                        
-                        <!-- GAS Settings Panel (Hidden by default) -->
-                        <div id="gas-settings-panel" style="display: none; margin-top: 0.5rem; padding: 0.5rem; background: rgba(0,0,0,0.15); border-radius: var(--radius-sm); border: 1px dashed var(--border-color);">
-                            <label class="pt-label" style="font-size: 0.7rem; margin-bottom: 0.25rem;">Google Apps Script Web App URL</label>
-                            <div style="display: flex; gap: 0.25rem;">
-                                <input type="text" id="gas-proxy-url-input" class="pt-input" placeholder="https://script.google.com/macros/s/.../exec" style="font-size: 0.7rem; padding: 0.25rem 0.5rem; flex: 1;">
-                                <button type="button" id="gas-save-btn" class="pt-btn pt-btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.7rem; line-height: 1;">
-                                    ${this.getTranslation('save_btn')}
-                                </button>
-                            </div>
-                        </div>
                     </div>
 
                     <h3 class="panel-title">${this.getTranslation('creator_title')}</h3>
@@ -598,322 +580,113 @@ class MapCardCreator {
     }
 
     bindLinkImportEvents(creatorDiv) {
+        // Cloudflare Worker URL – coordinate extraction is done server-side.
+        // After deploying worker/maps-resolver/index.js to Cloudflare Workers,
+        // replace the placeholder below with your *.workers.dev URL.
+        // The Worker has no secret keys; it is safe to hardcode.
+        const RESOLVER_WORKER_URL = MapCardCreator.RESOLVER_WORKER_URL || '';
+
         const input = creatorDiv.querySelector('#maps-import-url');
         const btn = creatorDiv.querySelector('#maps-import-btn');
         const statusMsg = creatorDiv.querySelector('#import-status-msg');
 
         if (!input || !btn || !statusMsg) return;
 
+        const showStatus = (text, type) => {
+            statusMsg.textContent = text;
+            statusMsg.style.display = 'block';
+            statusMsg.style.color = type === 'error'
+                ? 'var(--text-danger, #ff4d4d)'
+                : type === 'success'
+                    ? 'var(--text-success, #2ecc71)'
+                    : 'var(--text-muted, #8e44ad)';
+            setTimeout(() => {
+                if (statusMsg.textContent === text) statusMsg.style.display = 'none';
+            }, 5000);
+        };
+
         const handleImport = async () => {
             const url = input.value.trim();
             if (!url) return;
 
-            // Simple Google Maps URL validation
             if (!url.includes('maps.app.goo.gl') && !url.includes('google.com/maps') && !url.includes('maps.google')) {
                 showStatus(this.getTranslation('parse_error'), 'error');
                 return;
             }
 
-            // [BYPASS 1] Check if it is a long Google Maps URL containing coordinates directly
+            // PATH A: Long URL – direct regex extraction, zero network requests
             const directCoordsMatch = url.match(/@([0-9.-]+),([0-9.-]+)/);
             if (directCoordsMatch) {
-                try {
-                    const lat = parseFloat(directCoordsMatch[1]);
-                    const lng = parseFloat(directCoordsMatch[2]);
-                    
-                    let placeName = this.getTranslation('custom_point');
-                    const placePathMatch = url.match(/\/place\/([^\/@]+)/);
-                    if (placePathMatch && placePathMatch[1]) {
-                        placeName = decodeURIComponent(placePathMatch[1].replace(/\+/g, ' '));
-                    }
-                    
-                    this.placeCustomPin(lat, lng);
-                    const form = this.element.querySelector('#card-creator-form');
-                    form.querySelector('#card-title').value = placeName;
-                    showStatus(this.getTranslation('parse_success'), 'success');
-                    input.value = '';
-                    
-                    if (this.options.onLandmarkSelected) {
-                        this.options.onLandmarkSelected({
-                            name: placeName,
-                            lat: lat,
-                            lng: lng,
-                            type: 'place',
-                            cost: 'Ücretsiz',
-                            duration: 30,
-                            desc: ''
-                        });
-                    }
-                    return;
-                } catch (bypassErr) {
-                    console.warn("Direct long url parse failed, falling back to fetch", bypassErr);
+                const lat = parseFloat(directCoordsMatch[1]);
+                const lng = parseFloat(directCoordsMatch[2]);
+                let placeName = this.getTranslation('custom_point');
+                const placePathMatch = url.match(/\/place\/([^\/@?]+)/);
+                if (placePathMatch && placePathMatch[1]) {
+                    placeName = decodeURIComponent(placePathMatch[1].replace(/\+/g, ' '));
                 }
+                this._applyParsedLocation({ lat, lng, placeName }, input);
+                showStatus(this.getTranslation('parse_success'), 'success');
+                return;
+            }
+
+            // PATH B: Short URL – resolve via our Cloudflare Worker
+            if (!RESOLVER_WORKER_URL) {
+                showStatus(this.getTranslation('parse_worker_missing'), 'error');
+                return;
             }
 
             showStatus(this.getTranslation('parsing_status'), 'info');
             btn.disabled = true;
 
             try {
-                // [BYPASS 2] If Google Apps Script proxy is configured, use it (100% stable, bypasses all blocks)
-                if (this.gasProxyUrl) {
-                    const response = await fetch(`${this.gasProxyUrl}?url=${encodeURIComponent(url)}`);
-                    if (response.ok) {
-                        const data = await response.json();
-                        if (data.unshortened_url) {
-                            const directMatch = data.unshortened_url.match(/@([0-9.-]+),([0-9.-]+)/);
-                            if (directMatch) {
-                                const lat = parseFloat(directMatch[1]);
-                                const lng = parseFloat(directMatch[2]);
-                                let placeName = this.getTranslation('custom_point');
-                                const placePathMatch = data.unshortened_url.match(/\/place\/([^\/@]+)/);
-                                if (placePathMatch && placePathMatch[1]) {
-                                    placeName = decodeURIComponent(placePathMatch[1].replace(/\+/g, ' '));
-                                }
-                                
-                                this.placeCustomPin(lat, lng);
-                                const form = this.element.querySelector('#card-creator-form');
-                                form.querySelector('#card-title').value = placeName;
-                                showStatus(this.getTranslation('parse_success'), 'success');
-                                input.value = '';
-                                
-                                if (this.options.onLandmarkSelected) {
-                                    this.options.onLandmarkSelected({ name: placeName, lat, lng, type: 'place', cost: 'Ücretsiz', duration: 30, desc: '' });
-                                }
-                                return;
-                            }
-                        }
-                        
-                        if (data.contents) {
-                            const parsed = this.parseHtmlForCoords(data.contents);
-                            if (parsed) {
-                                this.placeCustomPin(parsed.lat, parsed.lng);
-                                const form = this.element.querySelector('#card-creator-form');
-                                form.querySelector('#card-title').value = parsed.placeName;
-                                showStatus(this.getTranslation('parse_success'), 'success');
-                                input.value = '';
-                                return;
-                            }
-                        }
-                    }
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+                const workerRes = await fetch(
+                    `${RESOLVER_WORKER_URL}?url=${encodeURIComponent(url)}`,
+                    { signal: controller.signal }
+                );
+                clearTimeout(timeoutId);
+
+                if (!workerRes.ok) throw new Error(`Worker HTTP ${workerRes.status}`);
+
+                const data = await workerRes.json();
+
+                if (!data.ok || data.lat == null || data.lng == null) {
+                    throw new Error(data.error || 'Worker could not extract coordinates');
                 }
 
-                // Fallback standard proxies (used locally or if no GAS proxy is defined)
-                const proxies = [
-                    url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-                    url => `http://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
-                    url => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
-                    url => `https://api.codetabs.com/v1/proxy?url=${encodeURIComponent(url)}`
-                ];
-
-                let htmlContent = null;
-                let usedProxy = "";
-
-                for (let i = 0; i < proxies.length; i++) {
-                    const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), 12000);
-
-                    try {
-                        const proxyUrl = proxies[i](url);
-                        const response = await fetch(proxyUrl, { signal: controller.signal });
-                        clearTimeout(timeoutId);
-
-                        if (!response.ok) continue;
-
-                        if (proxyUrl.includes('allorigins.win')) {
-                            const data = await response.json();
-                            htmlContent = data.contents;
-                        } else {
-                            htmlContent = await response.text();
-                        }
-
-                        if (htmlContent) {
-                            usedProxy = proxyUrl;
-                            break;
-                        }
-                    } catch (proxyErr) {
-                        clearTimeout(timeoutId);
-                        console.warn(`Proxy ${i} failed/timedout, trying next fallback...`, proxyErr);
-                    }
-                }
-
-                if (!htmlContent) {
-                    throw new Error("Empty HTML content received from all proxy layers");
-                }
-
-                const parsed = this.parseHtmlForCoords(htmlContent);
-                if (!parsed) {
-                    throw new Error("Could not extract coordinates from HTML source");
-                }
-
-                // Update map view and place custom pin
-                this.placeCustomPin(parsed.lat, parsed.lng);
-                
-                // Set form title specifically to the resolved place name
-                const form = this.element.querySelector('#card-creator-form');
-                form.querySelector('#card-title').value = parsed.placeName;
-                
-                // Show success
+                const placeName = data.placeName || this.getTranslation('custom_point');
+                this._applyParsedLocation({ lat: data.lat, lng: data.lng, placeName }, input);
                 showStatus(this.getTranslation('parse_success'), 'success');
-                input.value = ''; // clear input on success
-
-                if (this.options.onLandmarkSelected) {
-                    this.options.onLandmarkSelected({
-                        name: parsed.placeName,
-                        lat: parsed.lat,
-                        lng: parsed.lng,
-                        type: 'place',
-                        cost: 'Ücretsiz',
-                        duration: 30,
-                        desc: ''
-                    });
-                }
 
             } catch (err) {
-                console.error("Error parsing maps link:", err);
-                const isSslErr = err.message.includes('Failed to fetch') || err.message.includes('cert') || err.message.includes('authority');
-                const errMsg = isSslErr 
-                    ? `${this.getTranslation('parse_error')} (Bağlantı Hatası: Güvenlik/SSL engeli. Lütfen tarayıcı adres barındaki UZUN linki yapıştırın!)`
-                    : `${this.getTranslation('parse_error')} (Detay: ${err.message})`;
-                showStatus(errMsg, 'error');
+                console.error('Maps link resolver error:', err);
+                showStatus(`${this.getTranslation('parse_error')} (${err.message})`, 'error');
             } finally {
                 btn.disabled = false;
             }
         };
 
-        const showStatus = (text, type) => {
-            statusMsg.textContent = text;
-            statusMsg.style.display = 'block';
-            if (type === 'error') {
-                statusMsg.style.color = 'var(--text-danger, #ff4d4d)';
-            } else if (type === 'success') {
-                statusMsg.style.color = 'var(--text-success, #2ecc71)';
-            } else {
-                statusMsg.style.color = 'var(--text-muted, #8e44ad)';
-            }
-            setTimeout(() => {
-                if (statusMsg.textContent === text) {
-                    statusMsg.style.display = 'none';
-                }
-            }, 5000);
-        };
-
-        // GAS Toggle and Save bindings
-        const gasToggle = creatorDiv.querySelector('#gas-toggle-link');
-        const gasPanel = creatorDiv.querySelector('#gas-settings-panel');
-        const gasInput = creatorDiv.querySelector('#gas-proxy-url-input');
-        const gasSaveBtn = creatorDiv.querySelector('#gas-save-btn');
-
-        if (gasToggle && gasPanel && gasInput && gasSaveBtn) {
-            // Load saved GAS URL from localStorage on mount
-            const savedGasUrl = localStorage.getItem('plantatil_gas_proxy_url');
-            if (savedGasUrl) {
-                gasInput.value = savedGasUrl;
-                this.gasProxyUrl = savedGasUrl; // apply it
-            }
-
-            gasToggle.addEventListener('click', (e) => {
-                e.preventDefault();
-                const isHidden = gasPanel.style.display === 'none';
-                gasPanel.style.display = isHidden ? 'block' : 'none';
-            });
-
-            gasSaveBtn.addEventListener('click', () => {
-                const val = gasInput.value.trim();
-                if (val) {
-                    localStorage.setItem('plantatil_gas_proxy_url', val);
-                    this.gasProxyUrl = val;
-                    showStatus('Apps Script API kaydedildi!', 'success');
-                } else {
-                    localStorage.removeItem('plantatil_gas_proxy_url');
-                    this.gasProxyUrl = null;
-                    showStatus('Apps Script API kaldırıldı', 'info');
-                }
-                gasPanel.style.display = 'none';
-            });
-        }
-
         btn.addEventListener('click', handleImport);
-        
-        // Also listen to Enter key inside input
         input.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                handleImport();
-            }
+            if (e.key === 'Enter') { e.preventDefault(); handleImport(); }
         });
-
-        // Auto import if a link is pasted
-        input.addEventListener('paste', () => {
-            setTimeout(handleImport, 100);
-        });
+        input.addEventListener('paste', () => setTimeout(handleImport, 100));
     }
 
-    parseHtmlForCoords(htmlContent) {
-        let lat = null;
-        let lng = null;
-
-        // Pattern 1: center=LAT%2CLNG or center=LAT,LNG
-        const centerMatch = htmlContent.match(/center=([0-9.-]+)(?:%2[Cc]|,)([0-9.-]+)/i);
-        if (centerMatch) {
-            lat = parseFloat(centerMatch[1]);
-            lng = parseFloat(centerMatch[2]);
+    /** Shared helper: pin the map, fill the form, fire onLandmarkSelected */
+    _applyParsedLocation({ lat, lng, placeName }, inputEl) {
+        this.placeCustomPin(lat, lng);
+        const form = this.element.querySelector('#card-creator-form');
+        if (form) form.querySelector('#card-title').value = placeName;
+        if (inputEl) inputEl.value = '';
+        if (this.options.onLandmarkSelected) {
+            this.options.onLandmarkSelected({
+                name: placeName, lat, lng,
+                type: 'place', cost: 'Ücretsiz', duration: 30, desc: ''
+            });
         }
-
-        // Pattern 2: q=LAT%2CLNG or q=LAT,LNG or q=LAT%2C\+?LNG
-        if (!lat || !lng) {
-            const qMatch = htmlContent.match(/q=([0-9.-]+)(?:%2[Cc]%2[Bb]|%2[Cc]\+?|,)([0-9.-]+)/i);
-            if (qMatch) {
-                lat = parseFloat(qMatch[1]);
-                lng = parseFloat(qMatch[2]);
-            }
-        }
-
-        // Pattern 3: pb=...!3dLAT!4dLNG
-        if (!lat || !lng) {
-            const pbMatch = htmlContent.match(/!3d([0-9.-]+)!4d([0-9.-]+)/i);
-            if (pbMatch) {
-                lat = parseFloat(pbMatch[1]);
-                lng = parseFloat(pbMatch[2]);
-            }
-        }
-
-        // Pattern 4: ll=LAT,LNG
-        if (!lat || !lng) {
-            const llMatch = htmlContent.match(/ll=([0-9.-]+),([0-9.-]+)/i);
-            if (llMatch) {
-                lat = parseFloat(llMatch[1]);
-                lng = parseFloat(llMatch[2]);
-            }
-        }
-
-        // Pattern 5: @LAT,LNG or @LAT%2CLNG
-        if (!lat || !lng) {
-            const urlCoordsMatch = htmlContent.match(/@([0-9.-]+)(?:%2[Cc]|,)([0-9.-]+)/i);
-            if (urlCoordsMatch) {
-                lat = parseFloat(urlCoordsMatch[1]);
-                lng = parseFloat(urlCoordsMatch[2]);
-            }
-        }
-
-        if (!lat || !lng) return null;
-
-        // Parse title (place name)
-        let placeName = this.getTranslation('custom_point');
-        const titleMatch = htmlContent.match(/<title>(.*?)<\/title>/i);
-        if (titleMatch && titleMatch[1]) {
-            let titleText = titleMatch[1].trim();
-            if (titleText.endsWith(' - Google Maps')) {
-                titleText = titleText.replace(' - Google Maps', '');
-            }
-            if (titleText.endsWith(' - Google Haritalar')) {
-                titleText = titleText.replace(' - Google Haritalar', '');
-            }
-            if (titleText && titleText !== 'Google Maps' && titleText !== 'Google Haritalar') {
-                placeName = titleText;
-            }
-        }
-
-        return { lat, lng, placeName };
     }
 }
 
