@@ -580,11 +580,10 @@ class MapCardCreator {
     }
 
     bindLinkImportEvents(creatorDiv) {
-        // Cloudflare Worker URL – coordinate extraction is done server-side.
-        // After deploying worker/maps-resolver/index.js to Cloudflare Workers,
-        // replace the placeholder below with your *.workers.dev URL.
-        // The Worker has no secret keys; it is safe to hardcode.
-        const RESOLVER_WORKER_URL = MapCardCreator.RESOLVER_WORKER_URL || '';
+        // Google Apps Script URL – resolves Google Maps short links server-side.
+        // GAS uses Google's own infrastructure so bot detection never triggers.
+        // This URL is not a secret: it has no billing or quota implications for callers.
+        const GAS_RESOLVER_URL = 'https://script.google.com/macros/s/AKfycbxmClZgNdbDGtm-3uG4Ze83Qub2hoM5d15KRMAOeaO7Ejyjroez9PzIzXdOY1DYqzKXIg/exec';
 
         const input = creatorDiv.querySelector('#maps-import-url');
         const btn = creatorDiv.querySelector('#maps-import-btn');
@@ -605,6 +604,20 @@ class MapCardCreator {
             }, 5000);
         };
 
+        // Extract coords + place name from a long Google Maps URL using regex (zero network)
+        const parseResolvedUrl = (resolvedUrl) => {
+            const coordsMatch = resolvedUrl.match(/@([0-9.-]+),([0-9.-]+)/);
+            if (!coordsMatch) return null;
+            const lat = parseFloat(coordsMatch[1]);
+            const lng = parseFloat(coordsMatch[2]);
+            let placeName = this.getTranslation('custom_point');
+            const placeMatch = resolvedUrl.match(/\/place\/([^\/@?]+)/);
+            if (placeMatch && placeMatch[1]) {
+                placeName = decodeURIComponent(placeMatch[1].replace(/\+/g, ' '));
+            }
+            return { lat, lng, placeName };
+        };
+
         const handleImport = async () => {
             const url = input.value.trim();
             if (!url) return;
@@ -614,50 +627,55 @@ class MapCardCreator {
                 return;
             }
 
-            // PATH A: Long URL – direct regex extraction, zero network requests
+            // PATH A: Long URL – coordinates already in URL, zero network requests
             const directCoordsMatch = url.match(/@([0-9.-]+),([0-9.-]+)/);
             if (directCoordsMatch) {
-                const lat = parseFloat(directCoordsMatch[1]);
-                const lng = parseFloat(directCoordsMatch[2]);
-                let placeName = this.getTranslation('custom_point');
-                const placePathMatch = url.match(/\/place\/([^\/@?]+)/);
-                if (placePathMatch && placePathMatch[1]) {
-                    placeName = decodeURIComponent(placePathMatch[1].replace(/\+/g, ' '));
+                const parsed = parseResolvedUrl(url);
+                if (parsed) {
+                    this._applyParsedLocation(parsed, input);
+                    showStatus(this.getTranslation('parse_success'), 'success');
                 }
-                this._applyParsedLocation({ lat, lng, placeName }, input);
-                showStatus(this.getTranslation('parse_success'), 'success');
                 return;
             }
 
-            // PATH B: Short URL – resolve via our Cloudflare Worker
-            if (!RESOLVER_WORKER_URL) {
-                showStatus(this.getTranslation('parse_worker_missing'), 'error');
-                return;
-            }
-
+            // PATH B: Short URL (maps.app.goo.gl) – resolve via Google Apps Script
             showStatus(this.getTranslation('parsing_status'), 'info');
             btn.disabled = true;
 
             try {
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 10000);
+                const timeoutId = setTimeout(() => controller.abort(), 12000);
 
-                const workerRes = await fetch(
-                    `${RESOLVER_WORKER_URL}?url=${encodeURIComponent(url)}`,
+                const res = await fetch(
+                    `${GAS_RESOLVER_URL}?url=${encodeURIComponent(url)}`,
                     { signal: controller.signal }
                 );
                 clearTimeout(timeoutId);
 
-                if (!workerRes.ok) throw new Error(`Worker HTTP ${workerRes.status}`);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-                const data = await workerRes.json();
+                const data = await res.json();
 
-                if (!data.ok || data.lat == null || data.lng == null) {
-                    throw new Error(data.error || 'Worker could not extract coordinates');
+                // GAS returns { unshortened_url, contents }
+                // Worker returns { ok, lat, lng, placeName }
+                // Handle both formats:
+                let parsed = null;
+
+                if (data.unshortened_url) {
+                    parsed = parseResolvedUrl(data.unshortened_url);
                 }
 
-                const placeName = data.placeName || this.getTranslation('custom_point');
-                this._applyParsedLocation({ lat: data.lat, lng: data.lng, placeName }, input);
+                if (!parsed && data.lat != null && data.lng != null) {
+                    parsed = {
+                        lat: data.lat,
+                        lng: data.lng,
+                        placeName: data.placeName || this.getTranslation('custom_point')
+                    };
+                }
+
+                if (!parsed) throw new Error(data.error || 'Could not extract coordinates');
+
+                this._applyParsedLocation(parsed, input);
                 showStatus(this.getTranslation('parse_success'), 'success');
 
             } catch (err) {
