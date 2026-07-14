@@ -583,7 +583,7 @@ class MapCardCreator {
         // Google Apps Script URL – resolves Google Maps short links server-side.
         // GAS uses Google's own infrastructure so bot detection never triggers.
         // This URL is not a secret: it has no billing or quota implications for callers.
-        const GAS_RESOLVER_URL = 'https://script.google.com/macros/s/AKfycbxmClZgNdbDGtm-3uG4Ze83Qub2hoM5d15KRMAOeaO7Ejyjroez9PzIzXdOY1DYqzKXIg/exec';
+        const GAS_RESOLVER_URL = 'https://script.google.com/macros/s/AKfycbxA0XCSIaDD3Q7iG7sJGxcQhVPa-j-brUXKxadcn8DgMsPCSe4pOVOto0gbSeJu3coykQ/exec';
 
         const input = creatorDiv.querySelector('#maps-import-url');
         const btn = creatorDiv.querySelector('#maps-import-btn');
