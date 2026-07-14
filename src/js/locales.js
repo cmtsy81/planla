@@ -57,7 +57,9 @@ const PLAN_TATIL_LOCALES = {
         import_btn: "Çözümle",
         parsing_status: "Çözümleniyor...",
         parse_error: "Link çözümlenemedi. Geçerli bir Google Maps linki girin.",
-        parse_success: "Mekan başarıyla çözümlendi!"
+        parse_success: "Mekan başarıyla çözümlendi!",
+        gas_settings_lbl: "Apps Script API Ayarı",
+        save_btn: "Kaydet"
     },
     en: {
         add_card: "Add Card to Plan",
@@ -113,7 +115,9 @@ const PLAN_TATIL_LOCALES = {
         import_btn: "Parse",
         parsing_status: "Parsing...",
         parse_error: "Failed to parse link. Enter a valid Google Maps link.",
-        parse_success: "Location successfully parsed!"
+        parse_success: "Location successfully parsed!",
+        gas_settings_lbl: "Apps Script API Config",
+        save_btn: "Save"
     }
 };
 

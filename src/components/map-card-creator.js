@@ -124,6 +124,24 @@ class MapCardCreator {
                             </button>
                         </div>
                         <div id="import-status-msg" style="display: none; font-size: 0.75rem; margin-top: 0.4rem; font-weight: 500; transition: color 0.2s;"></div>
+                        
+                        <!-- GAS Settings Toggle -->
+                        <div class="gas-settings-toggle" style="margin-top: 0.5rem; text-align: right;">
+                            <a href="#" id="gas-toggle-link" style="font-size: 0.7rem; color: var(--text-muted, #7f8c8d); text-decoration: none; display: inline-flex; align-items: center; gap: 0.2rem;">
+                                ⚙️ ${this.getTranslation('gas_settings_lbl')}
+                            </a>
+                        </div>
+                        
+                        <!-- GAS Settings Panel (Hidden by default) -->
+                        <div id="gas-settings-panel" style="display: none; margin-top: 0.5rem; padding: 0.5rem; background: rgba(0,0,0,0.15); border-radius: var(--radius-sm); border: 1px dashed var(--border-color);">
+                            <label class="pt-label" style="font-size: 0.7rem; margin-bottom: 0.25rem;">Google Apps Script Web App URL</label>
+                            <div style="display: flex; gap: 0.25rem;">
+                                <input type="text" id="gas-proxy-url-input" class="pt-input" placeholder="https://script.google.com/macros/s/.../exec" style="font-size: 0.7rem; padding: 0.25rem 0.5rem; flex: 1;">
+                                <button type="button" id="gas-save-btn" class="pt-btn pt-btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.7rem; line-height: 1;">
+                                    ${this.getTranslation('save_btn')}
+                                </button>
+                            </div>
+                        </div>
                     </div>
 
                     <h3 class="panel-title">${this.getTranslation('creator_title')}</h3>
@@ -778,6 +796,41 @@ class MapCardCreator {
                 }
             }, 5000);
         };
+
+        // GAS Toggle and Save bindings
+        const gasToggle = creatorDiv.querySelector('#gas-toggle-link');
+        const gasPanel = creatorDiv.querySelector('#gas-settings-panel');
+        const gasInput = creatorDiv.querySelector('#gas-proxy-url-input');
+        const gasSaveBtn = creatorDiv.querySelector('#gas-save-btn');
+
+        if (gasToggle && gasPanel && gasInput && gasSaveBtn) {
+            // Load saved GAS URL from localStorage on mount
+            const savedGasUrl = localStorage.getItem('plantatil_gas_proxy_url');
+            if (savedGasUrl) {
+                gasInput.value = savedGasUrl;
+                this.gasProxyUrl = savedGasUrl; // apply it
+            }
+
+            gasToggle.addEventListener('click', (e) => {
+                e.preventDefault();
+                const isHidden = gasPanel.style.display === 'none';
+                gasPanel.style.display = isHidden ? 'block' : 'none';
+            });
+
+            gasSaveBtn.addEventListener('click', () => {
+                const val = gasInput.value.trim();
+                if (val) {
+                    localStorage.setItem('plantatil_gas_proxy_url', val);
+                    this.gasProxyUrl = val;
+                    showStatus('Apps Script API kaydedildi!', 'success');
+                } else {
+                    localStorage.removeItem('plantatil_gas_proxy_url');
+                    this.gasProxyUrl = null;
+                    showStatus('Apps Script API kaldırıldı', 'info');
+                }
+                gasPanel.style.display = 'none';
+            });
+        }
 
         btn.addEventListener('click', handleImport);
         
