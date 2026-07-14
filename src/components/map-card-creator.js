@@ -596,7 +596,7 @@ class MapCardCreator {
                 return;
             }
 
-            // [BYPASS] Check if it is a long Google Maps URL containing coordinates directly
+            // [BYPASS 1] Check if it is a long Google Maps URL containing coordinates directly
             const directCoordsMatch = url.match(/@([0-9.-]+),([0-9.-]+)/);
             if (directCoordsMatch) {
                 try {
@@ -636,10 +636,53 @@ class MapCardCreator {
             btn.disabled = true;
 
             try {
-                // Multi-Proxy Fallback list to bypass local CORS blocks and server downtimes
+                // [BYPASS 2] If Google Apps Script proxy is configured, use it (100% stable, bypasses all blocks)
+                if (this.gasProxyUrl) {
+                    const response = await fetch(`${this.gasProxyUrl}?url=${encodeURIComponent(url)}`);
+                    if (response.ok) {
+                        const data = await response.json();
+                        if (data.unshortened_url) {
+                            const directMatch = data.unshortened_url.match(/@([0-9.-]+),([0-9.-]+)/);
+                            if (directMatch) {
+                                const lat = parseFloat(directMatch[1]);
+                                const lng = parseFloat(directMatch[2]);
+                                let placeName = this.getTranslation('custom_point');
+                                const placePathMatch = data.unshortened_url.match(/\/place\/([^\/@]+)/);
+                                if (placePathMatch && placePathMatch[1]) {
+                                    placeName = decodeURIComponent(placePathMatch[1].replace(/\+/g, ' '));
+                                }
+                                
+                                this.placeCustomPin(lat, lng);
+                                const form = this.element.querySelector('#card-creator-form');
+                                form.querySelector('#card-title').value = placeName;
+                                showStatus(this.getTranslation('parse_success'), 'success');
+                                input.value = '';
+                                
+                                if (this.options.onLandmarkSelected) {
+                                    this.options.onLandmarkSelected({ name: placeName, lat, lng, type: 'place', cost: 'Ücretsiz', duration: 30, desc: '' });
+                                }
+                                return;
+                            }
+                        }
+                        
+                        if (data.contents) {
+                            const parsed = this.parseHtmlForCoords(data.contents);
+                            if (parsed) {
+                                this.placeCustomPin(parsed.lat, parsed.lng);
+                                const form = this.element.querySelector('#card-creator-form');
+                                form.querySelector('#card-title').value = parsed.placeName;
+                                showStatus(this.getTranslation('parse_success'), 'success');
+                                input.value = '';
+                                return;
+                            }
+                        }
+                    }
+                }
+
+                // Fallback standard proxies (used locally or if no GAS proxy is defined)
                 const proxies = [
                     url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-                    url => `http://api.allorigins.win/get?url=${encodeURIComponent(url)}`, // HTTP fallback to bypass local SSL/Cert issues
+                    url => `http://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
                     url => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
                     url => `https://api.codetabs.com/v1/proxy?url=${encodeURIComponent(url)}`
                 ];
@@ -649,7 +692,7 @@ class MapCardCreator {
 
                 for (let i = 0; i < proxies.length; i++) {
                     const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), 12000); // 12 seconds timeout limit
+                    const timeoutId = setTimeout(() => controller.abort(), 12000);
 
                     try {
                         const proxyUrl = proxies[i](url);
@@ -667,7 +710,7 @@ class MapCardCreator {
 
                         if (htmlContent) {
                             usedProxy = proxyUrl;
-                            break; // Successfully fetched, exit loop
+                            break;
                         }
                     } catch (proxyErr) {
                         clearTimeout(timeoutId);
@@ -679,81 +722,17 @@ class MapCardCreator {
                     throw new Error("Empty HTML content received from all proxy layers");
                 }
 
-                // Parse coordinates using regex patterns (case-insensitive and URL-decode variations)
-                let lat = null;
-                let lng = null;
-
-                // Pattern 1: center=LAT%2CLNG or center=LAT,LNG
-                const centerMatch = htmlContent.match(/center=([0-9.-]+)(?:%2[Cc]|,)([0-9.-]+)/i);
-                if (centerMatch) {
-                    lat = parseFloat(centerMatch[1]);
-                    lng = parseFloat(centerMatch[2]);
-                }
-
-                // Pattern 2: q=LAT%2CLNG or q=LAT,LNG or q=LAT%2C\+?LNG
-                if (!lat || !lng) {
-                    const qMatch = htmlContent.match(/q=([0-9.-]+)(?:%2[Cc]%2[Bb]|%2[Cc]\+?|,)([0-9.-]+)/i);
-                    if (qMatch) {
-                        lat = parseFloat(qMatch[1]);
-                        lng = parseFloat(qMatch[2]);
-                    }
-                }
-
-                // Pattern 3: pb=...!3dLAT!4dLNG
-                if (!lat || !lng) {
-                    const pbMatch = htmlContent.match(/!3d([0-9.-]+)!4d([0-9.-]+)/i);
-                    if (pbMatch) {
-                        lat = parseFloat(pbMatch[1]);
-                        lng = parseFloat(pbMatch[2]);
-                    }
-                }
-
-                // Pattern 4: ll=LAT,LNG
-                if (!lat || !lng) {
-                    const llMatch = htmlContent.match(/ll=([0-9.-]+),([0-9.-]+)/i);
-                    if (llMatch) {
-                        lat = parseFloat(llMatch[1]);
-                        lng = parseFloat(llMatch[2]);
-                    }
-                }
-
-                // Pattern 5: @LAT,LNG or @LAT%2CLNG
-                if (!lat || !lng) {
-                    const urlCoordsMatch = htmlContent.match(/@([0-9.-]+)(?:%2[Cc]|,)([0-9.-]+)/i);
-                    if (urlCoordsMatch) {
-                        lat = parseFloat(urlCoordsMatch[1]);
-                        lng = parseFloat(urlCoordsMatch[2]);
-                    }
-                }
-
-                if (!lat || !lng) {
-                    throw new Error("Could not extract coordinates");
-                }
-
-                // Parse title (place name)
-                let placeName = this.getTranslation('custom_point');
-                const titleMatch = htmlContent.match(/<title>(.*?)<\/title>/i);
-                if (titleMatch && titleMatch[1]) {
-                    let titleText = titleMatch[1].trim();
-                    // Clean up titleText
-                    if (titleText.endsWith(' - Google Maps')) {
-                        titleText = titleText.replace(' - Google Maps', '');
-                    }
-                    if (titleText.endsWith(' - Google Haritalar')) {
-                        titleText = titleText.replace(' - Google Haritalar', '');
-                    }
-                    // If it is just coordinates or boring text, keep it clean
-                    if (titleText && titleText !== 'Google Maps' && titleText !== 'Google Haritalar') {
-                        placeName = titleText;
-                    }
+                const parsed = this.parseHtmlForCoords(htmlContent);
+                if (!parsed) {
+                    throw new Error("Could not extract coordinates from HTML source");
                 }
 
                 // Update map view and place custom pin
-                this.placeCustomPin(lat, lng);
+                this.placeCustomPin(parsed.lat, parsed.lng);
                 
                 // Set form title specifically to the resolved place name
                 const form = this.element.querySelector('#card-creator-form');
-                form.querySelector('#card-title').value = placeName;
+                form.querySelector('#card-title').value = parsed.placeName;
                 
                 // Show success
                 showStatus(this.getTranslation('parse_success'), 'success');
@@ -761,9 +740,9 @@ class MapCardCreator {
 
                 if (this.options.onLandmarkSelected) {
                     this.options.onLandmarkSelected({
-                        name: placeName,
-                        lat: lat,
-                        lng: lng,
+                        name: parsed.placeName,
+                        lat: parsed.lat,
+                        lng: parsed.lng,
                         type: 'place',
                         cost: 'Ücretsiz',
                         duration: 30,
@@ -814,6 +793,74 @@ class MapCardCreator {
         input.addEventListener('paste', () => {
             setTimeout(handleImport, 100);
         });
+    }
+
+    parseHtmlForCoords(htmlContent) {
+        let lat = null;
+        let lng = null;
+
+        // Pattern 1: center=LAT%2CLNG or center=LAT,LNG
+        const centerMatch = htmlContent.match(/center=([0-9.-]+)(?:%2[Cc]|,)([0-9.-]+)/i);
+        if (centerMatch) {
+            lat = parseFloat(centerMatch[1]);
+            lng = parseFloat(centerMatch[2]);
+        }
+
+        // Pattern 2: q=LAT%2CLNG or q=LAT,LNG or q=LAT%2C\+?LNG
+        if (!lat || !lng) {
+            const qMatch = htmlContent.match(/q=([0-9.-]+)(?:%2[Cc]%2[Bb]|%2[Cc]\+?|,)([0-9.-]+)/i);
+            if (qMatch) {
+                lat = parseFloat(qMatch[1]);
+                lng = parseFloat(qMatch[2]);
+            }
+        }
+
+        // Pattern 3: pb=...!3dLAT!4dLNG
+        if (!lat || !lng) {
+            const pbMatch = htmlContent.match(/!3d([0-9.-]+)!4d([0-9.-]+)/i);
+            if (pbMatch) {
+                lat = parseFloat(pbMatch[1]);
+                lng = parseFloat(pbMatch[2]);
+            }
+        }
+
+        // Pattern 4: ll=LAT,LNG
+        if (!lat || !lng) {
+            const llMatch = htmlContent.match(/ll=([0-9.-]+),([0-9.-]+)/i);
+            if (llMatch) {
+                lat = parseFloat(llMatch[1]);
+                lng = parseFloat(llMatch[2]);
+            }
+        }
+
+        // Pattern 5: @LAT,LNG or @LAT%2CLNG
+        if (!lat || !lng) {
+            const urlCoordsMatch = htmlContent.match(/@([0-9.-]+)(?:%2[Cc]|,)([0-9.-]+)/i);
+            if (urlCoordsMatch) {
+                lat = parseFloat(urlCoordsMatch[1]);
+                lng = parseFloat(urlCoordsMatch[2]);
+            }
+        }
+
+        if (!lat || !lng) return null;
+
+        // Parse title (place name)
+        let placeName = this.getTranslation('custom_point');
+        const titleMatch = htmlContent.match(/<title>(.*?)<\/title>/i);
+        if (titleMatch && titleMatch[1]) {
+            let titleText = titleMatch[1].trim();
+            if (titleText.endsWith(' - Google Maps')) {
+                titleText = titleText.replace(' - Google Maps', '');
+            }
+            if (titleText.endsWith(' - Google Haritalar')) {
+                titleText = titleText.replace(' - Google Haritalar', '');
+            }
+            if (titleText && titleText !== 'Google Maps' && titleText !== 'Google Haritalar') {
+                placeName = titleText;
+            }
+        }
+
+        return { lat, lng, placeName };
     }
 }
 
