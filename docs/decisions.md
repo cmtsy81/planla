@@ -123,10 +123,9 @@ Kullanıcı döndüğünde doğrudan kodlama ve test aşamasına geçilecek olup
 - **Karar 2 (Light Mode ve Renk Paleti Altyapısı):** Uygulama varsayılan koyu (dark) görünümünün yanına bir Açık Mod (Light Mode) desteği alacak. Ayrıca son aşamada kullanıcıya sunulmak üzere 4-5 farklı renk paleti (mavi, turuncu, yeşil vb. ana tema renkleri) seçeneği sunulacak.
 - **Karar 3 (CSS Değişkenleri Standardı):** Bu hedefleri kolayca gerçekleştirmek için tüm CSS değişkenleri (renkler, arka planlar, kart camı efektleri) [core.css](file:///d:/004_KODLAMA/Planla/src/css/core.css) dosyasında `.light-mode` ve `.theme-orange` gibi CSS sınıflarıyla ezilebilecek şekilde dinamik değişkenlerle (`var()`) kurgulanacak. Böylece son aşamada kod refactoring yapmaya gerek kalmayacak.
 
-### 14 Temmuz 2026 - Modül 13: Google Maps Link Çözümleme ve CORS Proxy Kararı
-- **Karar:** Google Maps paylaşılan mekan ve konum linklerinin otomatik çözümlenmesinde, tarayıcı tarafındaki CORS engellerini aşmak için frontend tabanlı **AllOrigins Proxy** API servisi (`https://api.allorigins.win/get?url=...`) kullanıldı.
-- **Detay:** AllOrigins üzerinden çekilen ham HTML sayfa kaynağı, koordinatlar (center, q, pb ve ll parametreleri) ve yer adı (HTML Title) tespiti için aşamalı regex desenleriyle taranarak çözümlendi.
+### 14 Temmuz 2026 - Modül 13: Google Maps Link Çözümleme ve Google Apps Script (GAS) Kararı
+- **Karar:** Google Maps kısa linklerinin çözümlenmesinde, genel CORS proxy servislerinin (AllOrigins, corsproxy vb.) Google tarafından bot olarak engellenmesini ve local geliştirme SSL hatalarını engellemek amacıyla **Google Apps Script (GAS)** tabanlı bir yönlendirme takip (redirect-follower) API servisi kullanıldı.
+- **Detay:** GAS servisinden dönen uzun URL bilgisi, koordinatlar ve yer adı tespiti için regex desenleriyle taranarak çözümlendi. Uzun koordinatlı linklerde ise hiç ağ isteği yapılmadan istemci tarafında doğrudan regex ile hızlı ayrıştırma yapıldı.
 - **İlişkili Dosyalar:**
   - `src/js/locales.js` (Güncellendi)
   - `src/components/map-card-creator.js` (Güncellendi)
-  - `src/playgrounds/map-card-creator-playground.html` (Güncellendi)
