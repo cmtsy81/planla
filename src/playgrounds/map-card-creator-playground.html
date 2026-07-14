@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Haritadan Kart Oluşturucu Oyun Alanı - PlanTatil 2.0</title>
+    <!-- Shared core css -->
+    <link rel="stylesheet" href="../css/core.css">
+    
+    <!-- Leaflet.js Maps CDN -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    
+    <!-- Leaflet MarkerCluster CDN -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
+    <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
+    
+    <style>
+        body {
+            padding: 1.5rem;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            transition: var(--transition);
+        }
+        
+        .playground-container {
+            max-width: 1300px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+        
+        .timeline-section {
+            margin-top: 1rem;
+        }
+        
+        .timeline-title-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 0.5rem;
+        }
+        
+        .timeline-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 1rem;
+            min-height: 120px;
+            background: rgba(0,0,0,0.15);
+            border: 1px dashed var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 1rem;
+            position: relative;
+        }
+        
+        .timeline-empty-state {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            text-align: center;
+            pointer-events: none;
+            width: 100%;
+        }
+        
+        .log-section {
+            background: #000;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 0.75rem 1rem;
+            font-family: monospace;
+            font-size: 0.8rem;
+            color: #ec4899;
+            height: 120px;
+            overflow-y: auto;
+        }
+        
+        .log-title {
+            font-family: var(--font-heading);
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.25rem;
+            margin-top: 1rem;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="playground-container">
+        <!-- Header -->
+        <div class="pt-section-header">
+            <h1 class="pt-section-title">Haritadan Kart Oluşturma Sandbox</h1>
+            <p class="pt-section-subtitle">Harita klik entegrasyonu, form doğrulama ve veri aktarım akışlarını test etme oyun alanı.</p>
+        </div>
+        
+        <!-- Creator Component Section -->
+        <div id="creator-mount-point">
+            <!-- MapCardCreator mounts here -->
+        </div>
+        
+        <!-- Timeline Integration Section -->
+        <div class="timeline-section pt-card">
+            <div class="timeline-title-bar">
+                <h3 style="font-family: var(--font-heading); font-size: 1.1rem;">Oluşturulan Kartlar Zaman Çizelgesi (Rota Akışı)</h3>
+                <span class="pt-badge pt-badge-progress" id="total-cards-badge">0 Durak</span>
+            </div>
+            
+            <div class="timeline-grid" id="timeline-grid">
+                <div class="timeline-empty-state" id="empty-state-msg">
+                    Haritadan kart oluşturup "Karta Plana Ekle"ye bastığınızda kartlar sırasıyla buraya eklenecektir.
+                </div>
+            </div>
+        </div>
+        
+        <!-- Log Section -->
+        <div>
+            <h4 class="log-title">Harita & Form Durum Değişikliği Bildirimleri (Sandbox Logs)</h4>
+            <div class="log-section" id="sandbox-log">
+                [Sistem] Harita oyun alanı yüklendi. Sinyaller bekleniyor...
+            </div>
+        </div>
+    </div>
+
+    <!-- Import Components -->
+    <script src="../js/locales.js"></script>
+    <script src="../components/travel-card.js"></script>
+    <script src="../components/map-card-creator.js"></script>
+    
+    <script>
+        // Sync light/dark theme from localStorage immediately on load
+        const savedTheme = localStorage.getItem('plantatil_theme') || 'dark';
+        if (savedTheme === 'light') {
+            document.body.classList.add('light-mode');
+        }
+
+        const creatorMount = document.getElementById('creator-mount-point');
+        const timelineGrid = document.getElementById('timeline-grid');
+        const logBox = document.getElementById('sandbox-log');
+        const emptyMsg = document.getElementById('empty-state-msg');
+        const totalBadge = document.getElementById('total-cards-badge');
+        
+        let createdCardsCount = 0;
+
+        function addLog(msg) {
+            const time = new Date().toLocaleTimeString();
+            logBox.innerHTML += `\n[${time}] ${msg}`;
+            logBox.scrollTop = logBox.scrollHeight;
+        }
+
+        // Initialize Creator Component
+        const creator = new MapCardCreator({
+            onCardCreated: (cardData) => {
+                addLog(`Yeni Kart Üretildi: "${cardData.title}" | Kategori: ${cardData.type} | Süre: ${cardData.duration}dk | Maliyet: ${cardData.cost}`);
+                
+                // Hide empty message
+                if (createdCardsCount === 0) {
+                    emptyMsg.style.display = 'none';
+                }
+                
+                createdCardsCount++;
+                totalBadge.textContent = `${createdCardsCount} Durak`;
+                
+                // Instantiate a TravelCard in COMPACT view and render in the timeline
+                const compactCard = new TravelCard(cardData, {
+                    compact: true,
+                    interactive: true,
+                    onStateChange: (updatedData) => {
+                        addLog(`Timeline Kart Güncellendi (ID: ${updatedData.id}) - Gezildi: ${updatedData.completed}`);
+                    }
+                });
+                
+                compactCard.render(timelineGrid);
+            },
+            onMapClick: (lat, lng) => {
+                addLog(`Harita Tıklaması - Konum: Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)} algılandı. Form yüklendi.`);
+            },
+            onLandmarkSelected: (landmark) => {
+                addLog(`Haritada Simgesel Mekan Seçildi: ${landmark.name.toUpperCase()}. Bilgiler forma yerleştirildi.`);
+            },
+            onRadiusFilterApplied: (lat, lng, radius) => {
+                addLog(`Yarıçap Filtresi Uygulandı - Merkez: [${lat.toFixed(4)}, ${lng.toFixed(4)}], Yarıçap: ${radius}m.`);
+            }
+        });
+        
+        creator.render(creatorMount);
+
+    </script>
+</body>
+</html>

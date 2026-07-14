@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gezi Kartı Oyun Alanı (Sandbox) - PlanTatil 2.0</title>
+    <!-- Shared core css -->
+    <link rel="stylesheet" href="../css/core.css">
+    
+    <style>
+        body {
+            padding: 1.5rem;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            transition: var(--transition);
+        }
+        
+        .playground-wrapper {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 1.5rem;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        @media (max-width: 768px) {
+            .playground-wrapper {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .controls-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        
+        .preview-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+        
+        .preset-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        
+        .preset-btn {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            padding: 0.5rem;
+            border-radius: 6px;
+            cursor: pointer;
+            text-align: left;
+            font-size: 0.85rem;
+            transition: var(--transition);
+        }
+        
+        .preset-btn:hover, .preset-btn.active {
+            background: var(--primary-glow);
+            color: var(--text-primary);
+            border-color: var(--primary);
+        }
+        
+        .preview-stage {
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 2rem;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 350px;
+        }
+        
+        .preview-stage .travel-card {
+            width: 100%;
+            max-width: 420px;
+        }
+        
+        .preview-stage.compact-active .travel-card {
+            max-width: 500px;
+        }
+        
+        .state-log {
+            background: #000;
+            border: 1px solid var(--border-color);
+            font-family: monospace;
+            font-size: 0.8rem;
+            color: #10b981;
+            padding: 1rem;
+            border-radius: 6px;
+            height: 150px;
+            overflow-y: auto;
+        }
+        
+        .log-title {
+            font-family: var(--font-heading);
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="pt-section-header" style="max-width: 1200px; margin: 0 auto 1.5rem auto;">
+        <h1 class="pt-section-title">Gezi Kartı Sandbox</h1>
+        <p class="pt-section-subtitle">Bu bileşen ana sayfadan tamamen bağımsız, mock veriyle geliştirilmektedir.</p>
+    </div>
+
+    <div class="playground-wrapper">
+        <!-- Controls Side Panel -->
+        <div class="controls-panel pt-card">
+            <h3>Bileşen Kontrolleri</h3>
+            
+            <div class="pt-form-group">
+                <label class="pt-label">Görünüm Modu</label>
+                <select id="view-mode-select" class="pt-select">
+                    <option value="detailed">Detaylı Görünüm (Önerilen)</option>
+                    <option value="compact">Kompakt Liste Görünümü</option>
+                </select>
+            </div>
+            
+            <div class="pt-form-group">
+                <label class="pt-label">Hazır Şablonlar</label>
+                <div class="preset-list">
+                    <button class="preset-btn active" data-preset="colosseum">Kolezyum Turu (Gezilecek Yer)</button>
+                    <button class="preset-btn" data-preset="giolitti">Giolitti Dondurmacısı (Lezzet)</button>
+                    <button class="preset-btn" data-preset="vatican">Vatikan Müzeleri (Yoğun)</button>
+                    <button class="preset-btn" data-preset="custom">Kişisel Özel Durak</button>
+                </div>
+            </div>
+            
+            <div class="pt-form-group">
+                <label class="pt-label">Giriş Parametreleri</label>
+                <label class="checkbox-label" style="margin-bottom: 0.5rem;">
+                    <input type="checkbox" id="param-completed"> Başlangıçta Gezildi
+                </label>
+                <label class="checkbox-label">
+                    <input type="checkbox" id="param-interactive" checked> İnteraktivite Aktif
+                </label>
+            </div>
+        </div>
+        
+        <!-- Live Preview Panel -->
+        <div class="preview-panel">
+            <div class="preview-stage" id="preview-stage">
+                <!-- Travel Card Rendered Here -->
+            </div>
+            
+            <div>
+                <h4 class="log-title">Canlı Durum/Callback İzleyici (State Logs)</h4>
+                <div class="state-log" id="state-log">
+                    [Sistem] Oyun alanı hazırlandı. Şablon yükleniyor...
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Import translation dictionary and travel card component script -->
+    <script src="../js/locales.js"></script>
+    <script src="../components/travel-card.js"></script>
+    
+    <script>
+        // Sync light/dark theme from localStorage immediately on load
+        const savedTheme = localStorage.getItem('plantatil_theme') || 'dark';
+        if (savedTheme === 'light') {
+            document.body.classList.add('light-mode');
+        }
+
+        // Presets database
+        const presets = {
+            colosseum: {
+                title: 'Antik Kolezyum & Roma Forumu',
+                type: 'place',
+                time: '09:00',
+                duration: 120,
+                cost: '€25',
+                location: 'Piazza del Colosseo, Roma',
+                description: 'Dünyanın en büyük antik amfitiyatrosu. Biletler resmi siteden haftalar öncesinden rezerve edilmelidir. Girişte kimlik kontrolü var.',
+                rating: 4.9,
+                votes: 4,
+                completed: false,
+                modes: ['heavy']
+            },
+            giolitti: {
+                title: 'Giolitti Gelateria Tarihi Dondurma',
+                type: 'food',
+                time: '14:30',
+                duration: 25,
+                cost: '€6',
+                location: 'Via Uffici del Vicario 40, Roma',
+                description: 'Roma\'nın en ünlü ve en eski dondurmacılarından biri. Önce kasadan fişinizi alın, sonra dondurma tezgahına sıraya girin.',
+                rating: 4.7,
+                votes: 12,
+                completed: false,
+                modes: ['gourmet', 'child-friendly']
+            },
+            vatican: {
+                title: 'Vatikan Müzeleri & Sistine Şapeli Girişi',
+                type: 'place',
+                time: '10:30',
+                duration: 180,
+                cost: '€30',
+                location: 'Viale Vaticano, Roma',
+                description: 'Michelangelo\'nun ikonik tavan fresklerini barındırır. Yoğun güvenlik sırası bekletir. Sabah erken veya geç öğleden sonra seansları tercih edilebilir.',
+                rating: 4.8,
+                votes: 7,
+                completed: true,
+                modes: ['heavy']
+            },
+            custom: {
+                title: 'Kişisel Özel Mola Noktası',
+                type: 'coffee',
+                time: '17:00',
+                duration: 40,
+                cost: '€4.50',
+                location: 'Navona Çevresi',
+                description: 'Gezinti arasında espresso ve tiramisu molası için harika bir yerel kahve dükkanı.',
+                rating: 4.5,
+                votes: 1,
+                completed: false,
+                modes: ['budget']
+            }
+        };
+
+        const stage = document.getElementById('preview-stage');
+        const log = document.getElementById('state-log');
+        const viewSelect = document.getElementById('view-mode-select');
+        const compCheck = document.getElementById('param-completed');
+        const interCheck = document.getElementById('param-interactive');
+        
+        let currentPreset = 'colosseum';
+        let cardInstance = null;
+
+        function addLog(msg) {
+            const time = new Date().toLocaleTimeString();
+            log.innerHTML += `\n[${time}] ${msg}`;
+            log.scrollTop = log.scrollHeight;
+        }
+
+        function renderCard() {
+            stage.innerHTML = '';
+            
+            // Get preset data
+            const baseData = JSON.parse(JSON.stringify(presets[currentPreset]));
+            
+            // Override preset with manual params
+            baseData.completed = compCheck.checked;
+            
+            const isCompact = viewSelect.value === 'compact';
+            
+            // Toggle stage CSS class
+            if (isCompact) {
+                stage.classList.add('compact-active');
+            } else {
+                stage.classList.remove('compact-active');
+            }
+            
+            cardInstance = new TravelCard(baseData, {
+                compact: isCompact,
+                interactive: interCheck.checked,
+                onStateChange: (updatedData) => {
+                    addLog(`Callback Tetiklendi - Kart ID: ${updatedData.id} | Gezildi: ${updatedData.completed} | Oy: ${updatedData.votes} (${updatedData.userVote || 'Yok'})`);
+                }
+            });
+            
+            cardInstance.render(stage);
+            addLog(`Bileşen Render Edildi - Şablon: ${currentPreset} | Görünüm: ${viewSelect.value}`);
+        }
+
+        // Preset buttons handlers
+        document.querySelectorAll('.preset-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentPreset = btn.getAttribute('data-preset');
+                
+                // Keep completed checkbox synced with preset initial values on switch
+                compCheck.checked = presets[currentPreset].completed;
+                
+                renderCard();
+            });
+        });
+
+        // Controls listeners
+        viewSelect.addEventListener('change', renderCard);
+        compCheck.addEventListener('change', renderCard);
+        interCheck.addEventListener('change', renderCard);
+
+        // Initial render
+        renderCard();
+    </script>
+</body>
+</html>

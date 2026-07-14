@@ -1,0 +1,1130 @@
+/**
+ * PlanTatil 2.0 Reusable Map Card Creator Component
+ * Uses shared styles from core.css and localization from locales.js
+ * Integrated with Leaflet.js Map and Leaflet.markercluster
+ */
+
+class MapCardCreator {
+    constructor(options = {}) {
+        this.options = {
+            onCardCreated: options.onCardCreated || null,
+            onMapClick: options.onMapClick || null,
+            onLandmarkSelected: options.onLandmarkSelected || null,
+            onRadiusFilterApplied: options.onRadiusFilterApplied || null,
+            interactive: options.interactive !== false,
+            lang: options.lang || 'tr',
+            currency: options.currency || '€'
+        };
+        this.currency = this.options.currency;
+        
+        // Rome Landmarks mock database with real LatLng coordinates
+        this.landmarks = [
+            { id: 'colosseum', name: 'Kolezyum (Colosseum)', type: 'place', duration: 90, cost: '€25', desc: 'Antik Roma arenası, biletler önceden alınmalı.', lat: 41.8902, lng: 12.4922 },
+            { id: 'trevi', name: 'Trevi Çeşmesi (Aşk Çeşmesi)', type: 'photo', duration: 20, cost: 'Ücretsiz', desc: 'Dilek dilemek için bozuk para fırlatın.', lat: 41.9009, lng: 12.4833 },
+            { id: 'pantheon', name: 'Panteon (Pantheon)', type: 'place', duration: 40, cost: '€5', desc: 'Mükemmel korunmuş antik tapınak, beton kubbe.', lat: 41.8986, lng: 12.4769 },
+            { id: 'giolitti', name: 'Giolitti Gelateria', type: 'coffee', duration: 30, cost: '€6', desc: 'Roma\'nın en eski dondurmacılarından biri.', lat: 41.9001, lng: 12.4777 },
+            { id: 'navona', name: 'Navona Meydanı', type: 'place', duration: 30, cost: 'Ücretsiz', desc: 'Bernini çeşmeleri ve barok mimari.', lat: 41.8989, lng: 12.4731 },
+            { id: 'vatican', name: 'Vatikan Müzeleri & Sistine Şapeli', type: 'place', duration: 180, cost: '€30', desc: 'Michelangelo\'nun tavan freskleri, büyük kalabalık.', lat: 41.9067, lng: 12.4547 },
+            { id: 'popolo', name: 'Piazza del Popolo', type: 'place', duration: 30, cost: 'Ücretsiz', desc: 'Büyük neoklasik meydan, kuzey kapısı.', lat: 41.9107, lng: 12.4764 },
+            { id: 'spagna', name: 'İspanyol Merdivenleri', type: 'photo', duration: 25, cost: 'Ücretsiz', desc: 'Kült merdivenler, Trinita dei Monti kilisesine çıkar.', lat: 41.9059, lng: 12.4828 },
+            { id: 'borghese', name: 'Villa Borghese Parkı', type: 'place', duration: 120, cost: 'Ücretsiz', desc: 'Roma\'nın kalbinde devasa yeşil park alanı.', lat: 41.9131, lng: 12.4862 },
+            { id: 'pompi', name: 'Pompi Tiramisu', type: 'food', duration: 20, cost: '€5', desc: 'Roma\'nın en ünlü tiramisucusu (İspanyol merdivenleri yakını).', lat: 41.9062, lng: 12.4820 },
+            { id: 'tazza', name: 'La Casa del Caffè Tazza d\'Oro', type: 'coffee', duration: 15, cost: '€3', desc: 'Pantheon yakınında tarihi kahve kavurucusu, granitası meşhurdur.', lat: 41.8990, lng: 12.4775 }
+        ];
+        
+        this.map = null;
+        this.markerCluster = null;
+        this.markersList = [];
+        this.customPinMarker = null;
+        this.radiusCircle = null;
+        this.selectedPoint = null;
+        this.element = null;
+        this.selectedRadiusCenter = [41.8986, 12.4769]; // Default centered at Pantheon
+    }
+    
+    getTranslation(key, defaultValue = '') {
+        const lang = this.options.lang;
+        if (window.PLAN_TATIL_LOCALES && window.PLAN_TATIL_LOCALES[lang] && window.PLAN_TATIL_LOCALES[lang][key]) {
+            return window.PLAN_TATIL_LOCALES[lang][key];
+        }
+        const fallback = {
+            tr: { 
+                add_card: "Kartı Plana Ekle", 
+                free: "Ücretsiz", 
+                custom_point: "Yeni Keşif Noktası",
+                radius_filter_lbl: "Keşif Yarıçapı",
+                radius_all: "Tüm Mesafe",
+                radius_500m: "500m (Yürüme)",
+                radius_1km: "1km (Yürüme/Mola)",
+                radius_3km: "3km (Araç/Toplu Taşıma)",
+                custom_point_desc: "Haritada işaretlenmiş kişisel nokta."
+            },
+            en: { 
+                add_card: "Add Card to Plan", 
+                free: "Free", 
+                custom_point: "New Discovery Point",
+                radius_filter_lbl: "Discovery Radius",
+                radius_all: "All Distances",
+                radius_500m: "500m (Walking)",
+                radius_1km: "1km (Walk/Break)",
+                radius_3km: "3km (Driving/Transit)",
+                custom_point_desc: "Personal point marked on the map."
+            }
+        };
+        return (fallback[lang] && fallback[lang][key]) || defaultValue || key;
+    }
+    
+    render(container) {
+        const creatorDiv = document.createElement('div');
+        creatorDiv.className = 'map-card-creator-container';
+        
+        creatorDiv.innerHTML = `
+            <div class="creator-layout">
+                <!-- Map Panel -->
+                <div class="map-panel pt-card">
+                    <div class="map-panel-header">
+                        <div>
+                            <h3 class="panel-title">${this.getTranslation('landmark_explorer')}</h3>
+                            <p class="panel-subtitle">${this.getTranslation('landmark_sub')}</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Interactive Map Container -->
+                    <div class="map-canvas-wrapper">
+                        <div id="pt-leaflet-map" style="width: 100%; height: 380px;"></div>
+                    </div>
+
+                    <!-- Radius Filter Slider -->
+                    <div class="radius-filter-panel pt-card" style="margin-top: 1rem; background: rgba(255,255,255,0.02); padding: 1rem; border-color: rgba(255,255,255,0.05);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                            <label class="pt-label" style="margin-bottom: 0; font-weight: 600;">${this.getTranslation('radius_filter_lbl')}</label>
+                            <span class="pt-badge pt-badge-progress" id="radius-val-display">${this.getTranslation('radius_all')}</span>
+                        </div>
+                        <input type="range" id="radius-slider" class="pt-range" min="0" max="3" value="0" style="width: 100%; accent-color: var(--primary);">
+                        <div class="radius-ticks" style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem; font-family: var(--font-heading);">
+                            <span>${this.getTranslation('radius_all')}</span>
+                            <span>500m</span>
+                            <span>1km</span>
+                            <span>3km</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Form Panel -->
+                <div class="form-panel pt-card">
+                    <!-- Google Maps Link Import Section -->
+                    <div class="link-import-panel" style="margin-bottom: 1.25rem; padding-bottom: 1.25rem; border-bottom: 1px dashed var(--border-color);">
+                        <label class="pt-label" style="font-weight: 600; display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+                            <span>🌐</span> ${this.getTranslation('import_link_lbl')}
+                        </label>
+                        <div style="display: flex; gap: 0.5rem;">
+                            <input type="text" id="maps-import-url" class="pt-input" placeholder="${this.getTranslation('import_link_placeholder')}" style="flex: 1; font-size: 0.8rem;">
+                            <button type="button" id="maps-import-btn" class="pt-btn pt-btn-secondary" style="padding: 0.5rem 1rem; font-size: 0.8rem; white-space: nowrap;">
+                                ${this.getTranslation('import_btn')}
+                            </button>
+                        </div>
+                        <div id="import-status-msg" style="display: none; font-size: 0.75rem; margin-top: 0.4rem; font-weight: 500; transition: color 0.2s;"></div>
+                    </div>
+
+                    <h3 class="panel-title">${this.getTranslation('creator_title')}</h3>
+                    <p class="panel-subtitle">${this.getTranslation('creator_sub')}</p>
+                    
+                    <form id="card-creator-form" class="creator-form">
+                        <input type="hidden" id="coord-lat" value="">
+                        <input type="hidden" id="coord-lng" value="">
+                        
+                        <div class="pt-form-group">
+                            <label class="pt-label" for="card-title">${this.getTranslation('card_title_lbl')}</label>
+                            <input type="text" id="card-title" class="pt-input" placeholder="Örn: Kolezyum Turu" required>
+                        </div>
+                        
+                        <div class="form-row">
+                            <div class="pt-form-group col-6">
+                                <label class="pt-label" for="card-type">${this.getTranslation('category_lbl')}</label>
+                                <select id="card-type" class="pt-select">
+                                    <option value="place">${this.getTranslation('place')}</option>
+                                    <option value="food">${this.getTranslation('food')}</option>
+                                    <option value="coffee">${this.getTranslation('coffee')}</option>
+                                    <option value="shop">${this.getTranslation('shop')}</option>
+                                    <option value="photo">${this.getTranslation('photo')}</option>
+                                    <option value="child">${this.getTranslation('child')}</option>
+                                </select>
+                            </div>
+                            <div class="pt-form-group col-6">
+                                <label class="pt-label" for="card-time">${this.getTranslation('start_time_lbl')}</label>
+                                <input type="time" id="card-time" class="pt-input" value="10:00" required>
+                            </div>
+                        </div>
+                        
+                        <div class="form-row">
+                            <div class="pt-form-group col-6">
+                                <label class="pt-label" for="card-duration">${this.getTranslation('duration_minutes_lbl')}</label>
+                                <input type="number" id="card-duration" class="pt-input" min="5" max="480" value="45" required>
+                            </div>
+                            <div class="pt-form-group col-6">
+                                <label class="pt-label" for="card-cost">${this.getTranslation('cost')}</label>
+                                <div class="input-group-currency" style="position: relative; display: flex; align-items: center;">
+                                    <span class="currency-addon" style="position: absolute; left: 12px; color: var(--text-muted); font-size: 0.95rem; pointer-events: none; font-weight: 500;">${this.currency}</span>
+                                    <input type="number" id="card-cost" class="pt-input" min="0" placeholder="0" style="padding-left: 28px;" value="0">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="pt-form-group">
+                            <label class="pt-label" for="card-desc">${this.getTranslation('notes_lbl')}</label>
+                            <textarea id="card-desc" class="pt-textarea" placeholder="..."></textarea>
+                        </div>
+                        
+                        <div class="pt-form-group">
+                            <label class="pt-label">${this.getTranslation('tags_lbl')}</label>
+                            <div class="checkbox-group">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" name="card-mode" value="child-friendly"> ${this.getTranslation('child-friendly')}
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" name="card-mode" value="gourmet"> ${this.getTranslation('gourmet')}
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" name="card-mode" value="heavy"> ${this.getTranslation('heavy')}
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" name="card-mode" value="budget"> ${this.getTranslation('budget')}
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <button type="submit" class="pt-btn pt-btn-primary full-width">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12h8M12 8v8"/></svg>
+                            ${this.getTranslation('add_card')}
+                        </button>
+                    </form>
+                </div>
+            </div>
+        `;
+        
+        this.element = creatorDiv;
+        if (container) {
+            container.appendChild(creatorDiv);
+        }
+        
+        // Initialize Map and Slider after rendering is completed in DOM
+        setTimeout(() => {
+            this.initMap();
+            this.bindSliderEvents();
+        }, 100);
+
+        // Form Submit Handler
+        const form = creatorDiv.querySelector('#card-creator-form');
+        form.addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.handleSubmit(form);
+        });
+
+        // Google Maps Link Import Bindings
+        this.bindLinkImportEvents(creatorDiv);
+        
+        return creatorDiv;
+    }
+    
+    initMap() {
+        if (!window.L) {
+            console.error("Leaflet.js is not loaded.");
+            return;
+        }
+
+        // Initialize Leaflet Map centered in Rome Pantheon
+        this.map = L.map('pt-leaflet-map', {
+            zoomControl: true,
+            doubleClickZoom: false // Disable double click zoom so we can use double click for custom pin
+        }).setView([41.8986, 12.4769], 14);
+
+        // Load Map Tiles dynamically based on active Light/Dark Theme
+        const isLight = document.body.classList.contains('light-mode') || document.documentElement.classList.contains('light-mode');
+        const tileUrl = isLight 
+            ? 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'
+            : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+
+        this.tileLayer = L.tileLayer(tileUrl, {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+            subdomains: 'abcd',
+            maxZoom: 20
+        }).addTo(this.map);
+
+        // Initialize Marker Cluster Group with Glassmorphism Design overriding standard leaflet clusters
+        this.markerCluster = L.markerClusterGroup({
+            showCoverageOnHover: false,
+            zoomToBoundsOnClick: true,
+            iconCreateFunction: (cluster) => {
+                const childCount = cluster.getChildCount();
+                let sizeClass = 'cluster-small';
+                if (childCount >= 5) sizeClass = 'cluster-medium';
+                if (childCount >= 10) sizeClass = 'cluster-large';
+                
+                return L.divIcon({
+                    html: `<div class="glass-cluster ${sizeClass}"><span>${childCount}</span></div>`,
+                    className: 'custom-cluster-icon-wrapper',
+                    iconSize: [40, 40]
+                });
+            }
+        });
+
+        // Add Simgesel Mekanlar (Landmarks) to Map
+        this.renderLandmarks();
+        
+        // Listen Map Click Events to place Custom Pins
+        this.map.on('click', (e) => {
+            const { lat, lng } = e.latlng;
+            this.placeCustomPin(lat, lng);
+            
+            // Set Selected Radius Center to the clicked location
+            this.selectedRadiusCenter = [lat, lng];
+            
+            // Trigger filter recalculation if filter is active
+            const slider = this.element.querySelector('#radius-slider');
+            const radiusVal = parseInt(slider.value, 10);
+            if (radiusVal > 0) {
+                this.applyRadiusFilter(lat, lng, radiusVal);
+            }
+
+            if (this.options.onMapClick) {
+                this.options.onMapClick(lat, lng);
+            }
+        });
+
+        this.map.on('dblclick', (e) => {
+            const { lat, lng } = e.latlng;
+            this.placeCustomPin(lat, lng);
+            this.selectedRadiusCenter = [lat, lng];
+            
+            const slider = this.element.querySelector('#radius-slider');
+            const radiusVal = parseInt(slider.value, 10);
+            if (radiusVal > 0) {
+                this.applyRadiusFilter(lat, lng, radiusVal);
+            }
+        });
+    }
+
+    renderLandmarks() {
+        if (!this.map || !this.markerCluster) return;
+
+        this.markerCluster.clearLayers();
+        this.markersList = [];
+
+        this.landmarks.forEach(l => {
+            // Category specific styling
+            const markerHtml = `
+                <div class="custom-map-marker ${l.type}-marker">
+                    <div class="marker-dot"></div>
+                    <div class="marker-radar"></div>
+                </div>
+            `;
+
+            const customIcon = L.divIcon({
+                html: markerHtml,
+                className: 'custom-marker-icon-wrapper',
+                iconSize: [24, 24],
+                iconAnchor: [12, 12]
+            });
+
+            const marker = L.marker([l.lat, l.lng], { icon: customIcon });
+            
+            // Popup details
+            marker.bindPopup(`
+                <div class="map-popup-content" style="font-family: var(--font-heading); color: var(--text-primary);">
+                    <strong style="font-size: 0.9rem; display:block; margin-bottom:0.25rem;">${l.name}</strong>
+                    <span class="pt-badge pt-badge-progress" style="font-size:0.7rem; padding: 0.1rem 0.4rem; margin-bottom: 0.5rem; display:inline-block;">${this.getTranslation(l.type)}</span>
+                    <p style="font-size: 0.75rem; color: var(--text-secondary); margin: 0 0 0.5rem 0;">${l.desc}</p>
+                    <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.75rem; border-top:1px solid var(--border-color); padding-top:0.5rem;">
+                        <span>⏱ ${l.duration}dk</span>
+                        <span style="color:var(--secondary); font-weight:bold;">${l.cost}</span>
+                    </div>
+                </div>
+            `);
+
+            // Select on click
+            marker.on('click', () => {
+                this.selectLandmark(l);
+                this.selectedRadiusCenter = [l.lat, l.lng];
+                
+                // Recalculate radius filter if active
+                const slider = this.element.querySelector('#radius-slider');
+                const radiusVal = parseInt(slider.value, 10);
+                if (radiusVal > 0) {
+                    this.applyRadiusFilter(l.lat, l.lng, radiusVal);
+                }
+
+                if (this.options.onLandmarkSelected) {
+                    this.options.onLandmarkSelected(l);
+                }
+            });
+
+            // Keep reference to landmark data inside marker object for filtering
+            marker.landmarkData = l;
+
+            this.markerCluster.addLayer(marker);
+            this.markersList.push(marker);
+        });
+
+        this.map.addLayer(this.markerCluster);
+    }
+    
+    selectLandmark(landmark) {
+        // Clear custom pin
+        if (this.customPinMarker) {
+            this.map.removeLayer(this.customPinMarker);
+            this.customPinMarker = null;
+        }
+        
+        const form = this.element.querySelector('#card-creator-form');
+        form.querySelector('#card-title').value = landmark.name;
+        form.querySelector('#card-type').value = landmark.type;
+        form.querySelector('#card-duration').value = landmark.duration;
+        
+        // Parse cost to numeric value
+        let numericCost = 0;
+        if (landmark.cost && landmark.cost !== 'Ücretsiz' && landmark.cost !== 'Free') {
+            numericCost = parseFloat(landmark.cost.replace(/[^0-9.]/g, '')) || 0;
+        }
+        form.querySelector('#card-cost').value = numericCost;
+        form.querySelector('#card-desc').value = landmark.desc;
+        form.querySelector('#coord-lat').value = landmark.lat;
+        form.querySelector('#coord-lng').value = landmark.lng;
+        
+        // Tick checkboxes automatically
+        const checkboxes = form.querySelectorAll('input[name="card-mode"]');
+        checkboxes.forEach(cb => {
+            cb.checked = false;
+            if (landmark.type === 'child' && cb.value === 'child-friendly') cb.checked = true;
+            if (landmark.type === 'food' && cb.value === 'gourmet') cb.checked = true;
+            if (landmark.duration >= 90 && cb.value === 'heavy') cb.checked = true;
+            if ((landmark.cost === 'Ücretsiz' || landmark.cost === 'Free' || landmark.cost === '0') && cb.value === 'budget') cb.checked = true;
+        });
+        
+        // Pan map smoothly to the selected landmark
+        this.map.panTo([landmark.lat, landmark.lng]);
+    }
+    
+    placeCustomPin(lat, lng) {
+        // Remove existing custom pin
+        if (this.customPinMarker) {
+            this.map.removeLayer(this.customPinMarker);
+        }
+
+        const customPinHtml = `
+            <div class="custom-map-marker custom-placement-marker">
+                <div class="marker-dot"></div>
+                <div class="marker-radar"></div>
+            </div>
+        `;
+
+        const customPinIcon = L.divIcon({
+            html: customPinHtml,
+            className: 'custom-marker-icon-wrapper',
+            iconSize: [28, 28],
+            iconAnchor: [14, 14]
+        });
+
+        this.customPinMarker = L.marker([lat, lng], { icon: customPinIcon }).addTo(this.map);
+        
+        // Fill form fields
+        const form = this.element.querySelector('#card-creator-form');
+        form.querySelector('#card-title').value = `${this.getTranslation('custom_point')} (${lat.toFixed(2)}, ${lng.toFixed(2)})`;
+        form.querySelector('#card-type').value = 'place';
+        form.querySelector('#card-duration').value = 30;
+        form.querySelector('#card-cost').value = 0;
+        form.querySelector('#card-desc').value = this.getTranslation('custom_point_desc');
+        form.querySelector('#coord-lat').value = lat;
+        form.querySelector('#coord-lng').value = lng;
+
+        // Reset checkboxed for new point
+        form.querySelectorAll('input[name="card-mode"]').forEach(cb => cb.checked = false);
+
+        // Center on the custom pin
+        this.map.panTo([lat, lng]);
+    }
+
+    bindSliderEvents() {
+        const slider = this.element.querySelector('#radius-slider');
+        const display = this.element.querySelector('#radius-val-display');
+
+        slider.addEventListener('input', (e) => {
+            const val = parseInt(e.target.value, 10);
+            
+            // Text display localization mapping
+            let label = this.getTranslation('radius_all');
+            if (val === 1) label = this.getTranslation('radius_500m');
+            if (val === 2) label = this.getTranslation('radius_1km');
+            if (val === 3) label = this.getTranslation('radius_3km');
+            
+            display.textContent = label;
+
+            // Recalculate filtering
+            const lat = this.selectedRadiusCenter[0];
+            const lng = this.selectedRadiusCenter[1];
+            this.applyRadiusFilter(lat, lng, val);
+
+            if (this.options.onRadiusFilterApplied) {
+                this.options.onRadiusFilterApplied(lat, lng, val);
+            }
+        });
+    }
+
+    applyRadiusFilter(lat, lng, val) {
+        if (!this.map) return;
+
+        // Remove previous circle
+        if (this.radiusCircle) {
+            this.map.removeLayer(this.radiusCircle);
+            this.radiusCircle = null;
+        }
+
+        // Yarıçap değerleri (Metre cinsinden)
+        let radiusMeters = 0;
+        if (val === 1) radiusMeters = 500;
+        if (val === 2) radiusMeters = 1000;
+        if (val === 3) radiusMeters = 3000;
+
+        if (radiusMeters === 0) {
+            // Show all markers
+            this.markersList.forEach(marker => {
+                if (!this.markerCluster.hasLayer(marker)) {
+                    this.markerCluster.addLayer(marker);
+                }
+            });
+            return;
+        }
+
+        // Draw Discovery Radius Circle
+        this.radiusCircle = L.circle([lat, lng], {
+            radius: radiusMeters,
+            color: 'var(--primary)',
+            fillColor: 'var(--primary)',
+            fillOpacity: 0.08,
+            weight: 1.5,
+            dashArray: '5, 5'
+        }).addTo(this.map);
+
+        // Filter markers based on Haversine distance on Earth
+        this.markersList.forEach(marker => {
+            const distance = this.map.distance([lat, lng], marker.getLatLng()); // returns distance in meters
+            if (distance <= radiusMeters) {
+                if (!this.markerCluster.hasLayer(marker)) {
+                    this.markerCluster.addLayer(marker);
+                }
+            } else {
+                if (this.markerCluster.hasLayer(marker)) {
+                    this.markerCluster.removeLayer(marker);
+                }
+            }
+        });
+    }
+    
+    handleSubmit(form) {
+        const modes = [];
+        const checkboxes = form.querySelectorAll('input[name="card-mode"]:checked');
+        checkboxes.forEach(cb => modes.push(cb.value));
+
+        const latVal = parseFloat(form.querySelector('#coord-lat').value) || 41.8986;
+        const lngVal = parseFloat(form.querySelector('#coord-lng').value) || 12.4769;
+        
+        const rawCost = parseFloat(form.querySelector('#card-cost').value) || 0;
+        const formattedCost = rawCost === 0 ? this.getTranslation('free') : `${this.currency}${rawCost}`;
+
+        const cardData = {
+            id: 'map_card_' + Math.random().toString(36).substr(2, 9),
+            title: form.querySelector('#card-title').value,
+            type: form.querySelector('#card-type').value,
+            time: form.querySelector('#card-time').value,
+            duration: parseInt(form.querySelector('#card-duration').value, 10),
+            cost: formattedCost,
+            description: form.querySelector('#card-desc').value,
+            modes: modes,
+            location: `Roma, İtalya (Lat: ${latVal.toFixed(4)}, Lng: ${lngVal.toFixed(4)})`,
+            rating: 4.8,
+            votes: 0,
+            completed: false,
+            lat: latVal,
+            lng: lngVal
+        };
+        
+        if (this.options.onCardCreated) {
+            this.options.onCardCreated(cardData);
+        }
+        
+        // Clear custom pin from map
+        if (this.customPinMarker) {
+            this.map.removeLayer(this.customPinMarker);
+            this.customPinMarker = null;
+        }
+
+        // Reset radius slider filter
+        const slider = this.element.querySelector('#radius-slider');
+        if (slider) {
+            slider.value = 0;
+            this.element.querySelector('#radius-val-display').textContent = this.getTranslation('radius_all');
+            this.applyRadiusFilter(latVal, lngVal, 0);
+        }
+        
+        form.reset();
+        form.querySelector('#card-time').value = '10:00';
+        form.querySelector('#card-cost').value = 0;
+    }
+
+    updateMapTheme() {
+        if (!this.map || !this.tileLayer) return;
+        const isLight = document.body.classList.contains('light-mode') || document.documentElement.classList.contains('light-mode');
+        const newUrl = isLight 
+            ? 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'
+            : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+        this.tileLayer.setUrl(newUrl);
+    }
+
+    bindLinkImportEvents(creatorDiv) {
+        const input = creatorDiv.querySelector('#maps-import-url');
+        const btn = creatorDiv.querySelector('#maps-import-btn');
+        const statusMsg = creatorDiv.querySelector('#import-status-msg');
+
+        if (!input || !btn || !statusMsg) return;
+
+        const handleImport = async () => {
+            const url = input.value.trim();
+            if (!url) return;
+
+            // Simple Google Maps URL validation
+            if (!url.includes('maps.app.goo.gl') && !url.includes('google.com/maps') && !url.includes('maps.google')) {
+                showStatus(this.getTranslation('parse_error'), 'error');
+                return;
+            }
+
+            // [BYPASS] Check if it is a long Google Maps URL containing coordinates directly
+            const directCoordsMatch = url.match(/@([0-9.-]+),([0-9.-]+)/);
+            if (directCoordsMatch) {
+                try {
+                    const lat = parseFloat(directCoordsMatch[1]);
+                    const lng = parseFloat(directCoordsMatch[2]);
+                    
+                    let placeName = this.getTranslation('custom_point');
+                    const placePathMatch = url.match(/\/place\/([^\/@]+)/);
+                    if (placePathMatch && placePathMatch[1]) {
+                        placeName = decodeURIComponent(placePathMatch[1].replace(/\+/g, ' '));
+                    }
+                    
+                    this.placeCustomPin(lat, lng);
+                    const form = this.element.querySelector('#card-creator-form');
+                    form.querySelector('#card-title').value = placeName;
+                    showStatus(this.getTranslation('parse_success'), 'success');
+                    input.value = '';
+                    
+                    if (this.options.onLandmarkSelected) {
+                        this.options.onLandmarkSelected({
+                            name: placeName,
+                            lat: lat,
+                            lng: lng,
+                            type: 'place',
+                            cost: 'Ücretsiz',
+                            duration: 30,
+                            desc: ''
+                        });
+                    }
+                    return;
+                } catch (bypassErr) {
+                    console.warn("Direct long url parse failed, falling back to fetch", bypassErr);
+                }
+            }
+
+            showStatus(this.getTranslation('parsing_status'), 'info');
+            btn.disabled = true;
+
+            try {
+                // Multi-Proxy Fallback list to bypass local CORS blocks and server downtimes
+                const proxies = [
+                    url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+                    url => `http://api.allorigins.win/get?url=${encodeURIComponent(url)}`, // HTTP fallback to bypass local SSL/Cert issues
+                    url => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
+                    url => `https://api.codetabs.com/v1/proxy?url=${encodeURIComponent(url)}`
+                ];
+
+                let htmlContent = null;
+                let usedProxy = "";
+
+                for (let i = 0; i < proxies.length; i++) {
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 12000); // 12 seconds timeout limit
+
+                    try {
+                        const proxyUrl = proxies[i](url);
+                        const response = await fetch(proxyUrl, { signal: controller.signal });
+                        clearTimeout(timeoutId);
+
+                        if (!response.ok) continue;
+
+                        if (proxyUrl.includes('allorigins.win')) {
+                            const data = await response.json();
+                            htmlContent = data.contents;
+                        } else {
+                            htmlContent = await response.text();
+                        }
+
+                        if (htmlContent) {
+                            usedProxy = proxyUrl;
+                            break; // Successfully fetched, exit loop
+                        }
+                    } catch (proxyErr) {
+                        clearTimeout(timeoutId);
+                        console.warn(`Proxy ${i} failed/timedout, trying next fallback...`, proxyErr);
+                    }
+                }
+
+                if (!htmlContent) {
+                    throw new Error("Empty HTML content received from all proxy layers");
+                }
+
+                // Parse coordinates using regex patterns (case-insensitive and URL-decode variations)
+                let lat = null;
+                let lng = null;
+
+                // Pattern 1: center=LAT%2CLNG or center=LAT,LNG
+                const centerMatch = htmlContent.match(/center=([0-9.-]+)(?:%2[Cc]|,)([0-9.-]+)/i);
+                if (centerMatch) {
+                    lat = parseFloat(centerMatch[1]);
+                    lng = parseFloat(centerMatch[2]);
+                }
+
+                // Pattern 2: q=LAT%2CLNG or q=LAT,LNG or q=LAT%2C\+?LNG
+                if (!lat || !lng) {
+                    const qMatch = htmlContent.match(/q=([0-9.-]+)(?:%2[Cc]%2[Bb]|%2[Cc]\+?|,)([0-9.-]+)/i);
+                    if (qMatch) {
+                        lat = parseFloat(qMatch[1]);
+                        lng = parseFloat(qMatch[2]);
+                    }
+                }
+
+                // Pattern 3: pb=...!3dLAT!4dLNG
+                if (!lat || !lng) {
+                    const pbMatch = htmlContent.match(/!3d([0-9.-]+)!4d([0-9.-]+)/i);
+                    if (pbMatch) {
+                        lat = parseFloat(pbMatch[1]);
+                        lng = parseFloat(pbMatch[2]);
+                    }
+                }
+
+                // Pattern 4: ll=LAT,LNG
+                if (!lat || !lng) {
+                    const llMatch = htmlContent.match(/ll=([0-9.-]+),([0-9.-]+)/i);
+                    if (llMatch) {
+                        lat = parseFloat(llMatch[1]);
+                        lng = parseFloat(llMatch[2]);
+                    }
+                }
+
+                // Pattern 5: @LAT,LNG or @LAT%2CLNG
+                if (!lat || !lng) {
+                    const urlCoordsMatch = htmlContent.match(/@([0-9.-]+)(?:%2[Cc]|,)([0-9.-]+)/i);
+                    if (urlCoordsMatch) {
+                        lat = parseFloat(urlCoordsMatch[1]);
+                        lng = parseFloat(urlCoordsMatch[2]);
+                    }
+                }
+
+                if (!lat || !lng) {
+                    throw new Error("Could not extract coordinates");
+                }
+
+                // Parse title (place name)
+                let placeName = this.getTranslation('custom_point');
+                const titleMatch = htmlContent.match(/<title>(.*?)<\/title>/i);
+                if (titleMatch && titleMatch[1]) {
+                    let titleText = titleMatch[1].trim();
+                    // Clean up titleText
+                    if (titleText.endsWith(' - Google Maps')) {
+                        titleText = titleText.replace(' - Google Maps', '');
+                    }
+                    if (titleText.endsWith(' - Google Haritalar')) {
+                        titleText = titleText.replace(' - Google Haritalar', '');
+                    }
+                    // If it is just coordinates or boring text, keep it clean
+                    if (titleText && titleText !== 'Google Maps' && titleText !== 'Google Haritalar') {
+                        placeName = titleText;
+                    }
+                }
+
+                // Update map view and place custom pin
+                this.placeCustomPin(lat, lng);
+                
+                // Set form title specifically to the resolved place name
+                const form = this.element.querySelector('#card-creator-form');
+                form.querySelector('#card-title').value = placeName;
+                
+                // Show success
+                showStatus(this.getTranslation('parse_success'), 'success');
+                input.value = ''; // clear input on success
+
+                if (this.options.onLandmarkSelected) {
+                    this.options.onLandmarkSelected({
+                        name: placeName,
+                        lat: lat,
+                        lng: lng,
+                        type: 'place',
+                        cost: 'Ücretsiz',
+                        duration: 30,
+                        desc: ''
+                    });
+                }
+
+            } catch (err) {
+                console.error("Error parsing maps link:", err);
+                const isSslErr = err.message.includes('Failed to fetch') || err.message.includes('cert') || err.message.includes('authority');
+                const errMsg = isSslErr 
+                    ? `${this.getTranslation('parse_error')} (Bağlantı Hatası: Güvenlik/SSL engeli. Lütfen tarayıcı adres barındaki UZUN linki yapıştırın!)`
+                    : `${this.getTranslation('parse_error')} (Detay: ${err.message})`;
+                showStatus(errMsg, 'error');
+            } finally {
+                btn.disabled = false;
+            }
+        };
+
+        const showStatus = (text, type) => {
+            statusMsg.textContent = text;
+            statusMsg.style.display = 'block';
+            if (type === 'error') {
+                statusMsg.style.color = 'var(--text-danger, #ff4d4d)';
+            } else if (type === 'success') {
+                statusMsg.style.color = 'var(--text-success, #2ecc71)';
+            } else {
+                statusMsg.style.color = 'var(--text-muted, #8e44ad)';
+            }
+            setTimeout(() => {
+                if (statusMsg.textContent === text) {
+                    statusMsg.style.display = 'none';
+                }
+            }, 5000);
+        };
+
+        btn.addEventListener('click', handleImport);
+        
+        // Also listen to Enter key inside input
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                handleImport();
+            }
+        });
+
+        // Auto import if a link is pasted
+        input.addEventListener('paste', () => {
+            setTimeout(handleImport, 100);
+        });
+    }
+}
+
+// Add Stylesheets dynamically to support Leaflet, glassmorphism clustering, and markers
+const creatorStyle = document.createElement('style');
+creatorStyle.textContent = `
+    .creator-layout {
+        display: grid;
+        grid-template-columns: 1.2fr 0.8fr;
+        gap: 1.5rem;
+        width: 100%;
+    }
+    
+    @media (max-width: 900px) {
+        .creator-layout {
+            grid-template-columns: 1fr;
+        }
+    }
+    
+    .panel-title {
+        font-size: 1.25rem;
+        margin-bottom: 0.25rem;
+        font-family: var(--font-heading);
+    }
+    
+    .panel-subtitle {
+        font-size: 0.85rem;
+        color: var(--text-secondary);
+        margin-bottom: 1.25rem;
+    }
+    
+    .map-canvas-wrapper {
+        border-radius: 8px;
+        overflow: hidden;
+        border: 1px solid var(--border-color);
+        background: #090d16;
+        position: relative;
+    }
+
+    /* Override Leaflet UI to fit core.css */
+    .leaflet-container {
+        background: #090d16 !important;
+        font-family: var(--font-body) !important;
+    }
+    
+    .leaflet-bar {
+        border: 1px solid var(--border-color) !important;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.5) !important;
+        border-radius: 6px !important;
+        overflow: hidden;
+    }
+
+    .leaflet-bar a {
+        background-color: var(--bg-card) !important;
+        color: var(--text-primary) !important;
+        border-bottom: 1px solid var(--border-color) !important;
+        transition: var(--transition) !important;
+    }
+
+    .leaflet-bar a:hover {
+        background-color: var(--primary) !important;
+        color: #fff !important;
+    }
+
+    .leaflet-popup-content-wrapper {
+        background: rgba(15, 23, 42, 0.95) !important;
+        backdrop-filter: blur(12px) !important;
+        border: 1px solid var(--border-color) !important;
+        border-radius: var(--radius-md) !important;
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.7) !important;
+        padding: 4px;
+    }
+
+    .leaflet-popup-tip {
+        background: rgba(15, 23, 42, 0.95) !important;
+        border-left: 1px solid var(--border-color) !important;
+        border-bottom: 1px solid var(--border-color) !important;
+    }
+
+    .leaflet-popup-close-button {
+        color: var(--text-muted) !important;
+        padding: 8px !important;
+    }
+
+    .leaflet-popup-close-button:hover {
+        color: #fff !important;
+    }
+
+    /* Glassmorphism Marker Clustering Styling */
+    .custom-cluster-icon-wrapper {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }
+
+    .glass-cluster {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 0.9rem;
+        font-family: var(--font-heading);
+        color: #fff;
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        transition: all 0.3s ease;
+    }
+
+    .glass-cluster:hover {
+        transform: scale(1.1);
+        box-shadow: 0 0 15px rgba(99, 102, 241, 0.6);
+    }
+
+    .cluster-small {
+        background: rgba(59, 130, 246, 0.25);
+        border: 2px solid rgba(59, 130, 246, 0.6);
+        box-shadow: 0 0 10px rgba(59, 130, 246, 0.3);
+    }
+
+    .cluster-medium {
+        background: rgba(139, 92, 246, 0.25);
+        border: 2px solid rgba(139, 92, 246, 0.6);
+        box-shadow: 0 0 15px rgba(139, 92, 246, 0.4);
+    }
+
+    .cluster-large {
+        background: rgba(236, 72, 153, 0.25);
+        border: 2px solid rgba(236, 72, 153, 0.6);
+        box-shadow: 0 0 20px rgba(236, 72, 153, 0.5);
+    }
+
+    /* Custom Leaflet Marker Styling */
+    .custom-marker-icon-wrapper {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }
+
+    .custom-map-marker {
+        position: relative;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        border: 2px solid #fff;
+        box-shadow: 0 0 8px rgba(0,0,0,0.5);
+        transition: all 0.3s ease;
+    }
+
+    .custom-map-marker:hover {
+        transform: scale(1.25);
+        z-index: 1000;
+    }
+
+    .marker-dot {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #fff;
+    }
+
+    .marker-radar {
+        position: absolute;
+        top: -8px;
+        left: -8px;
+        right: -8px;
+        bottom: -8px;
+        border-radius: 50%;
+        border: 1px solid inherit;
+        opacity: 0.4;
+        animation: markerRadarPulse 2s infinite ease-out;
+        pointer-events: none;
+    }
+
+    @keyframes markerRadarPulse {
+        0% { transform: scale(0.6); opacity: 0.8; }
+        100% { transform: scale(1.8); opacity: 0; }
+    }
+
+    /* Category marker colors matching core.css colors */
+    .place-marker { background: #3b82f6; border-color: #93c5fd; }
+    .place-marker .marker-radar { border-color: #3b82f6; }
+    
+    .food-marker { background: #f43f5e; border-color: #fca5a5; }
+    .food-marker .marker-radar { border-color: #f43f5e; }
+    
+    .coffee-marker { background: #10b981; border-color: #6ee7b7; }
+    .coffee-marker .marker-radar { border-color: #10b981; }
+    
+    .shop-marker { background: #ec4899; border-color: #fbcfe8; }
+    .shop-marker .marker-radar { border-color: #ec4899; }
+    
+    .photo-marker { background: #eab308; border-color: #fef08a; }
+    .photo-marker .marker-radar { border-color: #eab308; }
+
+    .child-marker { background: #8b5cf6; border-color: #ddd6fe; }
+    .child-marker .marker-radar { border-color: #8b5cf6; }
+
+    /* Custom Custom Pin placement marker */
+    .custom-placement-marker {
+        background: #ec4899;
+        border-color: #fff;
+        width: 18px;
+        height: 18px;
+        animation: customPinJump 0.5s ease-out;
+    }
+
+    .custom-placement-marker .marker-dot {
+        width: 8px;
+        height: 8px;
+        background: #fff;
+    }
+
+    .custom-placement-marker .marker-radar {
+        top: -12px;
+        left: -12px;
+        right: -12px;
+        bottom: -12px;
+        border-color: #ec4899;
+    }
+
+    @keyframes customPinJump {
+        0% { transform: translateY(-20px); opacity: 0; }
+        50% { transform: translateY(5px); }
+        100% { transform: translateY(0); opacity: 1; }
+    }
+    
+    .creator-form {
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .form-row {
+        display: flex;
+        gap: 0.75rem;
+    }
+    
+    .col-6 {
+        flex: 1;
+    }
+    
+    .checkbox-group {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.5rem;
+        background: rgba(0,0,0,0.15);
+        border: 1px solid var(--border-color);
+        padding: 0.75rem;
+        border-radius: 6px;
+    }
+    
+    .checkbox-label {
+        font-size: 0.8rem;
+        color: var(--text-secondary);
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        cursor: pointer;
+        user-select: none;
+    }
+    
+    .checkbox-label input {
+        cursor: pointer;
+    }
+    
+    .full-width {
+        width: 100%;
+        margin-top: 0.5rem;
+    }
+
+    /* Range slider override */
+    .pt-range {
+        -webkit-appearance: none;
+        width: 100%;
+        height: 6px;
+        border-radius: 3px;
+        background: rgba(255,255,255,0.1);
+        outline: none;
+        margin: 0.5rem 0;
+        transition: background 0.3s;
+    }
+
+    .pt-range::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: var(--primary);
+        cursor: pointer;
+        box-shadow: 0 0 8px var(--primary);
+        transition: transform 0.1s, background 0.3s;
+    }
+
+    .pt-range::-webkit-slider-thumb:hover {
+        transform: scale(1.2);
+    }
+`;
+document.head.appendChild(creatorStyle);
+
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = MapCardCreator;
+} else {
+    window.MapCardCreator = MapCardCreator;
+}
+
