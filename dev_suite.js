@@ -321,7 +321,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             const iframe = document.createElement('iframe');
             iframe.className = 'sandbox-iframe';
-            iframe.src = playUrl;
+            iframe.src = playUrl + '?v=1.0.0';
             iframe.onload = () => {
                 const isLight = document.body.classList.contains('light-mode');
                 if (isLight && iframe.contentDocument && iframe.contentDocument.body) {

@@ -16,3 +16,7 @@ Bu dosya, projede çalışacak tüm AI kodlama ajanları (Antigravity vb.) için
 - Yeni bir özellik geliştirileceği zaman, öncelikle [docs/](file:///d:/004_KODLAMA/Planla/docs/) klasörü altındaki ilgili `.md` modül dosyası okunmalı ve oradaki **kriterler** (criteria) sırasıyla tamamlanmalıdır.
 - Modüller arası ilişkileri bozacak bağımlılıklar eklenmemelidir. Eğer bağımlılık değişirse, modülün en üstündeki `dependencies` YAML bloğu güncellenmeli ve `python update_modules_data.py` komutu çalıştırılarak veri derlenmelidir.
 - Her bileşen, `src/playgrounds/` altında kendi mock verileriyle çalışan bağımsız bir oyun alanına (playground) sahip olmalıdır. Bileşen geliştirilirken ana sayfa koduna müdahale edilmemelidir.
+
+## 4. Kullanıcı Deneyimi ve Mobil Tasarım Standartları
+- Mobil cihazlarda veri girişini (klavye gereksinimini) en aza indirecek arayüz bileşenleri tasarlanmalıdır.
+- Süre ve bütçe/maliyet gibi sayısal form alanlarının altında, akümülatif (multiple-select) hızlı seçim butonları (rozetler) yer almalıdır.

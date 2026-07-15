@@ -129,3 +129,15 @@ Kullanıcı döndüğünde doğrudan kodlama ve test aşamasına geçilecek olup
 - **İlişkili Dosyalar:**
   - `src/js/locales.js` (Güncellendi)
   - `src/components/map-card-creator.js` (Güncellendi)
+
+### 15 Temmuz 2026 - Modül 13: Google Haritalar Zengin Veri Çekme (Scraping) Entegrasyonu
+- **Karar:** Google Maps linkleri çözümlenirken koordinat ve mekan adına ek olarak Puan (Rating), Yorum Sayısı (Reviews) ve Fiyat Seviyesi (Price Level) verilerinin de otomatik olarak çekilmesi kabul edildi.
+- **Detay:** Google'ın arayüz güncellemelerine karşı direnci artırmak için kazıma (scraping) regex mantığı tamamen Google Apps Script (GAS) tarafında kurgulandı. Böylece Google'ın HTML yapısı değişirse istemci uygulamasını güncellemeye gerek kalmadan sadece GAS kodu güncellenebilecektir. Ayrıca puan/fiyat okunamasa dahi sistemin kırılmadan enlem/boylam dönmeye devam etmesi (hata toleransı) tasarlandı. Çekilen bu zengin veriler kart oluşturucu formundaki "Notlar/Açıklama" alanına otomatik doldurulacaktır.
+- **İlişkili Dosyalar:**
+  - `src/components/map-card-creator.js` (Güncellendi)
+
+### 15 Temmuz 2026 - Mobil UX: Akümülatif Süre ve Bütçe Butonları Kararı
+- **Karar:** Gezi kartı oluşturma formundaki süre ve bütçe alanlarına, mobilde veri girişini kolaylaştıracak toplanabilir (akümülatif) hızlı seçim butonları eklenmesi kabul edildi.
+- **Detay:** Butonlar toggle/multiple-select mantığıyla çalışacak, seçilen rozetlerin değerleri üst üste toplanarak input alanına yazılacaktır. Hiçbir buton seçili değilse başlangıç varsayılan değerleri geçerli olacaktır.
+- **İlişkili Dosyalar:**
+  - `src/components/map-card-creator.js` (Güncellendi)

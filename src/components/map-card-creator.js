@@ -160,12 +160,26 @@ class MapCardCreator {
                             <div class="pt-form-group col-6">
                                 <label class="pt-label" for="card-duration">${this.getTranslation('duration_minutes_lbl')}</label>
                                 <input type="number" id="card-duration" class="pt-input" min="5" max="480" value="45" required>
+                                <div class="quick-accumulation-container duration-accumulator" style="display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.4rem;">
+                                    <button type="button" class="pt-badge-btn" data-value="15">15d</button>
+                                    <button type="button" class="pt-badge-btn" data-value="30">30d</button>
+                                    <button type="button" class="pt-badge-btn" data-value="45">45d</button>
+                                    <button type="button" class="pt-badge-btn" data-value="60">1s</button>
+                                    <button type="button" class="pt-badge-btn" data-value="120">2s</button>
+                                    <button type="button" class="pt-badge-btn" data-value="240">4s</button>
+                                </div>
                             </div>
                             <div class="pt-form-group col-6">
                                 <label class="pt-label" for="card-cost">${this.getTranslation('cost')}</label>
                                 <div class="input-group-currency" style="position: relative; display: flex; align-items: center;">
                                     <span class="currency-addon" style="position: absolute; left: 12px; color: var(--text-muted); font-size: 0.95rem; pointer-events: none; font-weight: 500;">${this.currency}</span>
                                     <input type="number" id="card-cost" class="pt-input" min="0" placeholder="0" style="padding-left: 28px;" value="0">
+                                </div>
+                                <div class="quick-accumulation-container cost-accumulator" style="display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.4rem;">
+                                    <button type="button" class="pt-badge-btn" data-value="5">5</button>
+                                    <button type="button" class="pt-badge-btn" data-value="10">10</button>
+                                    <button type="button" class="pt-badge-btn" data-value="20">20</button>
+                                    <button type="button" class="pt-badge-btn" data-value="50">50</button>
                                 </div>
                             </div>
                         </div>
@@ -222,6 +236,9 @@ class MapCardCreator {
 
         // Google Maps Link Import Bindings
         this.bindLinkImportEvents(creatorDiv);
+        
+        // Mobil UX Accumulator Bindings
+        this.bindQuickAccumulatorEvents(creatorDiv);
         
         return creatorDiv;
     }
@@ -568,6 +585,7 @@ class MapCardCreator {
         form.reset();
         form.querySelector('#card-time').value = '10:00';
         form.querySelector('#card-cost').value = 0;
+        form.querySelectorAll('.pt-badge-btn').forEach(btn => btn.classList.remove('active'));
     }
 
     updateMapTheme() {
@@ -673,6 +691,13 @@ class MapCardCreator {
                     };
                 }
 
+                if (parsed) {
+                    // Attach rich metadata from GAS response
+                    parsed.rating = data.rating;
+                    parsed.reviews = data.reviews;
+                    parsed.priceLevel = data.priceLevel;
+                }
+
                 if (!parsed) throw new Error(data.error || 'Could not extract coordinates');
 
                 this._applyParsedLocation(parsed, input);
@@ -693,16 +718,80 @@ class MapCardCreator {
         input.addEventListener('paste', () => setTimeout(handleImport, 100));
     }
 
+    bindQuickAccumulatorEvents(creatorDiv) {
+        const durationInput = creatorDiv.querySelector('#card-duration');
+        const costInput = creatorDiv.querySelector('#card-cost');
+        
+        const durationBadges = creatorDiv.querySelectorAll('.duration-accumulator .pt-badge-btn');
+        const costBadges = creatorDiv.querySelectorAll('.cost-accumulator .pt-badge-btn');
+
+        if (!durationInput || !costInput) return;
+
+        // Helper: Calculate sum of active buttons
+        const calculateSum = (badges) => {
+            let total = 0;
+            badges.forEach(btn => {
+                if (btn.classList.contains('active')) {
+                    total += parseInt(btn.getAttribute('data-value'), 10) || 0;
+                }
+            });
+            return total;
+        };
+
+        // Duration badges click handler
+        durationBadges.forEach(btn => {
+            btn.addEventListener('click', () => {
+                btn.classList.toggle('active');
+                const total = calculateSum(durationBadges);
+                // If total is 0 (all inactive), return to default value 45
+                durationInput.value = total > 0 ? total : 45;
+            });
+        });
+
+        // Cost badges click handler
+        costBadges.forEach(btn => {
+            btn.addEventListener('click', () => {
+                btn.classList.toggle('active');
+                const total = calculateSum(costBadges);
+                costInput.value = total;
+            });
+        });
+
+        // Keyboard input bypass: If user types manually, reset active badges selection
+        durationInput.addEventListener('input', () => {
+            durationBadges.forEach(btn => btn.classList.remove('active'));
+        });
+
+        costInput.addEventListener('input', () => {
+            costBadges.forEach(btn => btn.classList.remove('active'));
+        });
+    }
+
     /** Shared helper: pin the map, fill the form, fire onLandmarkSelected */
-    _applyParsedLocation({ lat, lng, placeName }, inputEl) {
+    _applyParsedLocation({ lat, lng, placeName, rating, reviews, priceLevel }, inputEl) {
         this.placeCustomPin(lat, lng);
         const form = this.element.querySelector('#card-creator-form');
-        if (form) form.querySelector('#card-title').value = placeName;
+        
+        let descText = '';
+        if (rating) {
+            descText += `Puan: ${rating} ★`;
+            if (reviews) descText += ` (${reviews} yorum)`;
+        }
+        if (priceLevel) {
+            descText += descText ? ` | Fiyat: ${priceLevel}` : `Fiyat: ${priceLevel}`;
+        }
+
+        if (form) {
+            form.querySelector('#card-title').value = placeName;
+            if (descText) {
+                form.querySelector('#card-desc').value = descText;
+            }
+        }
         if (inputEl) inputEl.value = '';
         if (this.options.onLandmarkSelected) {
             this.options.onLandmarkSelected({
                 name: placeName, lat, lng,
-                type: 'place', cost: 'Ücretsiz', duration: 30, desc: ''
+                type: 'place', cost: priceLevel || 'Ücretsiz', duration: 30, desc: descText
             });
         }
     }
@@ -1009,6 +1098,34 @@ creatorStyle.textContent = `
 
     .pt-range::-webkit-slider-thumb:hover {
         transform: scale(1.2);
+    }
+
+    /* Accumulation quick badges */
+    .pt-badge-btn {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid var(--border-color);
+        color: var(--text-secondary);
+        padding: 0.2rem 0.45rem;
+        font-size: 0.72rem;
+        border-radius: 4px;
+        cursor: pointer;
+        font-family: var(--font-body);
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        user-select: none;
+        outline: none;
+    }
+    
+    .pt-badge-btn:hover {
+        background: rgba(255, 255, 255, 0.1);
+        color: var(--text-primary);
+        border-color: rgba(255, 255, 255, 0.2);
+    }
+    
+    .pt-badge-btn.active {
+        background: var(--primary);
+        border-color: var(--primary);
+        color: #fff;
+        box-shadow: 0 0 8px var(--primary-glow, rgba(139, 92, 246, 0.4));
     }
 `;
 document.head.appendChild(creatorStyle);
