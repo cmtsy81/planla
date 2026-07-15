@@ -215,6 +215,9 @@ class MapCardCreator {
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12h8M12 8v8"/></svg>
                             ${this.getTranslation('add_card')}
                         </button>
+                        <button type="button" class="pt-btn pt-btn-secondary mobile-close-btn full-width" style="margin-top: 0.5rem; display: none;">
+                            Kapat
+                        </button>
                     </form>
                 </div>
             </div>
@@ -599,6 +602,12 @@ class MapCardCreator {
         form.querySelector('#card-time').value = '10:00';
         form.querySelector('#card-cost').value = 0;
         form.querySelectorAll('.pt-badge-btn').forEach(btn => btn.classList.remove('active'));
+        
+        const formPanel = this.element.querySelector('.form-panel');
+        if (formPanel) {
+            formPanel.classList.remove('expanded');
+            formPanel.scrollTop = 0;
+        }
     }
 
     updateMapTheme() {
@@ -783,13 +792,34 @@ class MapCardCreator {
     bindBottomSheetEvents(creatorDiv) {
         const handle = creatorDiv.querySelector('.bottom-sheet-handle-wrapper');
         const formPanel = creatorDiv.querySelector('.form-panel');
+        const closeBtn = creatorDiv.querySelector('.mobile-close-btn');
 
-        if (!handle || !formPanel) return;
+        if (!formPanel) return;
 
-        // Toggle expanded status when clicking the handle
-        handle.addEventListener('click', () => {
-            formPanel.classList.toggle('expanded');
-        });
+        const toggleSheet = (forceState) => {
+            if (forceState !== undefined) {
+                if (forceState) {
+                    formPanel.classList.add('expanded');
+                } else {
+                    formPanel.classList.remove('expanded');
+                    formPanel.scrollTop = 0;
+                }
+            } else {
+                const willExpand = !formPanel.classList.contains('expanded');
+                formPanel.classList.toggle('expanded');
+                if (!willExpand) {
+                    formPanel.scrollTop = 0;
+                }
+            }
+        };
+
+        if (handle) {
+            handle.addEventListener('click', () => toggleSheet());
+        }
+
+        if (closeBtn) {
+            closeBtn.addEventListener('click', () => toggleSheet(false));
+        }
     }
 
     /** Shared helper: pin the map, fill the form, fire onLandmarkSelected */
@@ -1218,10 +1248,16 @@ creatorStyle.textContent = `
             justify-content: center;
             align-items: center;
             width: 100%;
-            height: 20px;
-            margin-top: -8px;
+            height: 24px;
+            margin-top: -12px;
             margin-bottom: 8px;
             cursor: pointer;
+            position: sticky;
+            top: -1.25rem;
+            background: rgba(15, 23, 42, 0.96);
+            z-index: 10;
+            padding: 4px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
         }
 
         .bottom-sheet-handle {
@@ -1234,6 +1270,10 @@ creatorStyle.textContent = `
 
         .bottom-sheet-handle-wrapper:hover .bottom-sheet-handle {
             background: rgba(255, 255, 255, 0.4);
+        }
+
+        .mobile-close-btn {
+            display: block !important;
         }
     }
 `;
