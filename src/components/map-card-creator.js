@@ -814,11 +814,21 @@ class MapCardCreator {
         };
 
         if (handle) {
-            handle.addEventListener('click', () => toggleSheet());
+            ['click', 'touchstart'].forEach(evt => {
+                handle.addEventListener(evt, (e) => {
+                    e.preventDefault();
+                    toggleSheet();
+                }, { passive: false });
+            });
         }
 
         if (closeBtn) {
-            closeBtn.addEventListener('click', () => toggleSheet(false));
+            ['click', 'touchstart'].forEach(evt => {
+                closeBtn.addEventListener(evt, (e) => {
+                    e.preventDefault();
+                    toggleSheet(false);
+                }, { passive: false });
+            });
         }
     }
 
@@ -1219,12 +1229,12 @@ creatorStyle.textContent = `
             left: 0;
             right: 0;
             z-index: 2500;
-            background: rgba(15, 23, 42, 0.96) !important;
+            background: var(--bg-card) !important;
             backdrop-filter: blur(20px) !important;
-            border: 1px solid rgba(255,255,255,0.08) !important;
+            border: 1px solid var(--border-color) !important;
             border-radius: 16px 16px 0 0 !important;
             padding: 1.25rem 1.25rem 2.5rem 1.25rem !important;
-            box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.8) !important;
+            box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.5) !important;
             transform: translateY(calc(100% - 68px)); /* Minibar size */
             transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1) !important;
             margin: 0 !important;
@@ -1254,22 +1264,23 @@ creatorStyle.textContent = `
             cursor: pointer;
             position: sticky;
             top: -1.25rem;
-            background: rgba(15, 23, 42, 0.96);
+            background: var(--bg-card) !important;
             z-index: 10;
             padding: 4px 0;
-            border-bottom: 1px solid rgba(255,255,255,0.05);
+            border-bottom: 1px solid var(--border-color) !important;
         }
 
         .bottom-sheet-handle {
             width: 40px;
             height: 5px;
-            background: rgba(255, 255, 255, 0.25);
+            background: var(--text-muted) !important;
+            opacity: 0.4;
             border-radius: 3px;
-            transition: background 0.3s;
+            transition: background 0.3s, opacity 0.3s;
         }
 
         .bottom-sheet-handle-wrapper:hover .bottom-sheet-handle {
-            background: rgba(255, 255, 255, 0.4);
+            opacity: 0.7;
         }
 
         .mobile-close-btn {
