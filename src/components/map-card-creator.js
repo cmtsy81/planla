@@ -1184,7 +1184,7 @@ creatorStyle.textContent = `
         }
 
         .form-panel {
-            position: absolute;
+            position: fixed;
             bottom: 0;
             left: 0;
             right: 0;
@@ -1203,7 +1203,14 @@ creatorStyle.textContent = `
         .form-panel.expanded {
             transform: translateY(0) !important;
             overflow-y: auto;
-            max-height: 80%;
+            max-height: 75vh;
+        }
+
+        /* Prevent iOS Safari auto-zoom on inputs */
+        .form-panel .pt-input, 
+        .form-panel select, 
+        .form-panel textarea {
+            font-size: 16px !important;
         }
 
         .bottom-sheet-handle-wrapper {
