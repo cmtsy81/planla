@@ -112,6 +112,10 @@ class MapCardCreator {
                 
                 <!-- Form Panel -->
                 <div class="form-panel pt-card">
+                    <!-- Mobil Bottom Sheet Handle -->
+                    <div class="bottom-sheet-handle-wrapper">
+                        <div class="bottom-sheet-handle"></div>
+                    </div>
                     <!-- Google Maps Link Import Section -->
                     <div class="link-import-panel" style="margin-bottom: 1.25rem; padding-bottom: 1.25rem; border-bottom: 1px dashed var(--border-color);">
                         <label class="pt-label" style="font-weight: 600; display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
@@ -239,6 +243,9 @@ class MapCardCreator {
         
         // Mobil UX Accumulator Bindings
         this.bindQuickAccumulatorEvents(creatorDiv);
+        
+        // Mobil Bottom Sheet Bindings
+        this.bindBottomSheetEvents(creatorDiv);
         
         return creatorDiv;
     }
@@ -386,6 +393,9 @@ class MapCardCreator {
     }
     
     selectLandmark(landmark) {
+        const formPanel = this.element.querySelector('.form-panel');
+        if (formPanel) formPanel.classList.add('expanded');
+
         // Clear custom pin
         if (this.customPinMarker) {
             this.map.removeLayer(this.customPinMarker);
@@ -422,6 +432,9 @@ class MapCardCreator {
     }
     
     placeCustomPin(lat, lng) {
+        const formPanel = this.element.querySelector('.form-panel');
+        if (formPanel) formPanel.classList.add('expanded');
+
         // Remove existing custom pin
         if (this.customPinMarker) {
             this.map.removeLayer(this.customPinMarker);
@@ -764,6 +777,18 @@ class MapCardCreator {
 
         costInput.addEventListener('input', () => {
             costBadges.forEach(btn => btn.classList.remove('active'));
+        });
+    }
+
+    bindBottomSheetEvents(creatorDiv) {
+        const handle = creatorDiv.querySelector('.bottom-sheet-handle-wrapper');
+        const formPanel = creatorDiv.querySelector('.form-panel');
+
+        if (!handle || !formPanel) return;
+
+        // Toggle expanded status when clicking the handle
+        handle.addEventListener('click', () => {
+            formPanel.classList.toggle('expanded');
         });
     }
 
@@ -1126,6 +1151,83 @@ creatorStyle.textContent = `
         border-color: var(--primary);
         color: #fff;
         box-shadow: 0 0 8px var(--primary-glow, rgba(139, 92, 246, 0.4));
+    }
+
+    /* Bottom Sheet Handle Styling (Desktop hides it) */
+    .bottom-sheet-handle-wrapper {
+        display: none;
+    }
+
+    /* Mobile Responsive styling for Bottom Sheet Layout */
+    @media (max-width: 600px) {
+        .creator-layout {
+            grid-template-columns: 1fr;
+            position: relative;
+            height: 480px; /* fixed fallback height for playground layout */
+            overflow: hidden;
+        }
+
+        .map-panel {
+            height: 100%;
+            margin-bottom: 0;
+            padding: 0.2rem !important;
+        }
+
+        #pt-leaflet-map {
+            height: 100% !important;
+            min-height: 450px;
+        }
+
+        /* Hide map header panel elements to save space on mobile */
+        .map-panel-header, .radius-filter-panel {
+            display: none !important;
+        }
+
+        .form-panel {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            z-index: 2500;
+            background: rgba(15, 23, 42, 0.96) !important;
+            backdrop-filter: blur(20px) !important;
+            border: 1px solid rgba(255,255,255,0.08) !important;
+            border-radius: 16px 16px 0 0 !important;
+            padding: 1.25rem 1.25rem 2.5rem 1.25rem !important;
+            box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.8) !important;
+            transform: translateY(calc(100% - 68px)); /* Minibar size */
+            transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1) !important;
+            margin: 0 !important;
+        }
+
+        .form-panel.expanded {
+            transform: translateY(0) !important;
+            overflow-y: auto;
+            max-height: 80%;
+        }
+
+        .bottom-sheet-handle-wrapper {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            height: 20px;
+            margin-top: -8px;
+            margin-bottom: 8px;
+            cursor: pointer;
+        }
+
+        .bottom-sheet-handle {
+            width: 40px;
+            height: 5px;
+            background: rgba(255, 255, 255, 0.25);
+            border-radius: 3px;
+            transition: background 0.3s;
+        }
+
+        .bottom-sheet-handle-wrapper:hover .bottom-sheet-handle {
+            background: rgba(255, 255, 255, 0.4);
+        }
     }
 `;
 document.head.appendChild(creatorStyle);

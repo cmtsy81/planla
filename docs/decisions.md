@@ -141,3 +141,9 @@ Kullanıcı döndüğünde doğrudan kodlama ve test aşamasına geçilecek olup
 - **Detay:** Butonlar toggle/multiple-select mantığıyla çalışacak, seçilen rozetlerin değerleri üst üste toplanarak input alanına yazılacaktır. Hiçbir buton seçili değilse başlangıç varsayılan değerleri geçerli olacaktır.
 - **İlişkili Dosyalar:**
   - `src/components/map-card-creator.js` (Güncellendi)
+
+### 15 Temmuz 2026 - Mobil UX: Alt Çekmece (Bottom-Sheet) Yerleşim Kararı
+- **Karar:** Mobilde haritanın dikeyde sıkışmasını önlemek ve kullanım kolaylığı sağlamak için form alanının "Bottom-Sheet" (Alt Çekmece) yapısına dönüştürülmesi kabul edildi.
+- **Detay:** Çekmece iki aşamalı (Collapsed: Kapalı/Minibar ve Expanded: Tam Açık) olarak çalışacaktır. Haritadan konum seçildiğinde veya üstteki tutamaca tıklandığında çekmece yukarı kayarak açılacak; kart plana eklendiğinde veya tutamaca tekrar basıldığında aşağı inecektir.
+- **İlişkili Dosyalar:**
+  - `src/components/map-card-creator.js` (Güncellendi)
