@@ -112,10 +112,6 @@ class MapCardCreator {
                 
                 <!-- Form Panel -->
                 <div class="form-panel pt-card">
-                    <!-- Mobil Bottom Sheet Handle -->
-                    <div class="bottom-sheet-handle-wrapper">
-                        <div class="bottom-sheet-handle"></div>
-                    </div>
                     <!-- Google Maps Link Import Section -->
                     <div class="link-import-panel" style="margin-bottom: 1.25rem; padding-bottom: 1.25rem; border-bottom: 1px dashed var(--border-color);">
                         <label class="pt-label" style="font-weight: 600; display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
@@ -397,7 +393,12 @@ class MapCardCreator {
     
     selectLandmark(landmark) {
         const formPanel = this.element.querySelector('.form-panel');
-        if (formPanel) formPanel.classList.add('expanded');
+        if (formPanel) {
+            formPanel.classList.add('expanded');
+            setTimeout(() => {
+                formPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }, 150);
+        }
 
         // Clear custom pin
         if (this.customPinMarker) {
@@ -436,7 +437,12 @@ class MapCardCreator {
     
     placeCustomPin(lat, lng) {
         const formPanel = this.element.querySelector('.form-panel');
-        if (formPanel) formPanel.classList.add('expanded');
+        if (formPanel) {
+            formPanel.classList.add('expanded');
+            setTimeout(() => {
+                formPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }, 150);
+        }
 
         // Remove existing custom pin
         if (this.customPinMarker) {
@@ -790,7 +796,6 @@ class MapCardCreator {
     }
 
     bindBottomSheetEvents(creatorDiv) {
-        const handle = creatorDiv.querySelector('.bottom-sheet-handle-wrapper');
         const formPanel = creatorDiv.querySelector('.form-panel');
         const closeBtn = creatorDiv.querySelector('.mobile-close-btn');
 
@@ -800,27 +805,21 @@ class MapCardCreator {
             if (forceState !== undefined) {
                 if (forceState) {
                     formPanel.classList.add('expanded');
+                    setTimeout(() => {
+                        formPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    }, 150);
                 } else {
                     formPanel.classList.remove('expanded');
-                    formPanel.scrollTop = 0;
                 }
             } else {
-                const willExpand = !formPanel.classList.contains('expanded');
                 formPanel.classList.toggle('expanded');
-                if (!willExpand) {
-                    formPanel.scrollTop = 0;
+                if (formPanel.classList.contains('expanded')) {
+                    setTimeout(() => {
+                        formPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    }, 150);
                 }
             }
         };
-
-        if (handle) {
-            ['click', 'touchstart'].forEach(evt => {
-                handle.addEventListener(evt, (e) => {
-                    e.preventDefault();
-                    toggleSheet();
-                }, { passive: false });
-            });
-        }
 
         if (closeBtn) {
             ['click', 'touchstart'].forEach(evt => {
@@ -1198,52 +1197,55 @@ creatorStyle.textContent = `
         display: none;
     }
 
-    /* Mobile Responsive styling for Bottom Sheet Layout */
+    /* Mobile Responsive styling for Vertical Flow Layout */
     @media (max-width: 600px) {
         .creator-layout {
-            grid-template-columns: 1fr;
-            position: relative;
-            height: 480px; /* fixed fallback height for playground layout */
-            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            height: auto !important;
+            overflow: visible !important;
         }
 
         .map-panel {
-            height: 100%;
+            width: 100%;
+            height: 350px !important;
+            padding: 0.25rem !important;
             margin-bottom: 0;
-            padding: 0.2rem !important;
         }
 
         #pt-leaflet-map {
             height: 100% !important;
-            min-height: 450px;
+            min-height: 320px;
         }
 
-        /* Hide map header panel elements to save space on mobile */
+        /* Hide map header elements on mobile to keep map clean */
         .map-panel-header, .radius-filter-panel {
             display: none !important;
         }
 
         .form-panel {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            z-index: 2500;
+            position: relative !important;
+            max-height: 0;
+            opacity: 0;
+            overflow: hidden;
             background: var(--bg-card) !important;
-            backdrop-filter: blur(20px) !important;
-            border: 1px solid var(--border-color) !important;
-            border-radius: 16px 16px 0 0 !important;
-            padding: 1.25rem 1.25rem 2.5rem 1.25rem !important;
-            box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.5) !important;
-            transform: translateY(calc(100% - 68px)); /* Minibar size */
-            transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1) !important;
+            border: none !important;
+            border-radius: var(--radius-lg) !important;
+            padding: 0 !important;
             margin: 0 !important;
+            box-shadow: none !important;
+            transform: none !important;
+            transition: max-height 0.4s ease-out, opacity 0.3s ease, padding 0.4s ease, margin 0.4s ease !important;
         }
 
         .form-panel.expanded {
-            transform: translateY(0) !important;
-            overflow-y: auto;
-            max-height: 75vh;
+            max-height: 1200px;
+            opacity: 1;
+            padding: 1.25rem !important;
+            margin-top: 0.5rem !important;
+            border: 1px solid var(--border-color) !important;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15) !important;
         }
 
         /* Prevent iOS Safari auto-zoom on inputs */
@@ -1251,36 +1253,6 @@ creatorStyle.textContent = `
         .form-panel select, 
         .form-panel textarea {
             font-size: 16px !important;
-        }
-
-        .bottom-sheet-handle-wrapper {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            width: 100%;
-            height: 24px;
-            margin-top: -12px;
-            margin-bottom: 8px;
-            cursor: pointer;
-            position: sticky;
-            top: -1.25rem;
-            background: var(--bg-card) !important;
-            z-index: 10;
-            padding: 4px 0;
-            border-bottom: 1px solid var(--border-color) !important;
-        }
-
-        .bottom-sheet-handle {
-            width: 40px;
-            height: 5px;
-            background: var(--text-muted) !important;
-            opacity: 0.4;
-            border-radius: 3px;
-            transition: background 0.3s, opacity 0.3s;
-        }
-
-        .bottom-sheet-handle-wrapper:hover .bottom-sheet-handle {
-            opacity: 0.7;
         }
 
         .mobile-close-btn {

@@ -20,4 +20,4 @@ Bu dosya, projede çalışacak tüm AI kodlama ajanları (Antigravity vb.) için
 ## 4. Kullanıcı Deneyimi ve Mobil Tasarım Standartları
 - Mobil cihazlarda veri girişini (klavye gereksinimini) en aza indirecek arayüz bileşenleri tasarlanmalıdır.
 - Süre ve bütçe/maliyet gibi sayısal form alanlarının altında, akümülatif (multiple-select) hızlı seçim butonları (rozetler) yer almalıdır.
-- Harita kart oluşturucu arayüzü mobilde (600px ve altı) tam ekran harita arkada kalacak şekilde, form alanını alttan yükselen sürüklenebilir/tıklanabilir bir "Alt Çekmece (Bottom-Sheet)" olarak sunmalıdır.
+- Harita kart oluşturucu arayüzü mobilde (600px ve altı) dikey akışta sunulmalıdır: En üstte sabit yükseklikte harita yer almalı, haritanın altında ise varsayılan olarak gizli olan form alanı bulunmalıdır. Konum seçildiğinde form alanı aşağı doğru pürüzsüzce açılmalı, kart eklendiğinde veya kapatıldığında ise dikeyde kapanmalıdır.

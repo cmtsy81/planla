@@ -147,3 +147,8 @@ Kullanıcı döndüğünde doğrudan kodlama ve test aşamasına geçilecek olup
 - **Detay:** Çekmece iki aşamalı (Collapsed: Kapalı/Minibar ve Expanded: Tam Açık) olarak çalışacaktır. Haritadan konum seçildiğinde veya üstteki tutamaca tıklandığında çekmece yukarı kayarak açılacak; kart plana eklendiğinde veya tutamaca tekrar basıldığında aşağı inecektir.
 - **İlişkili Dosyalar:**
   - `src/components/map-card-creator.js` (Güncellendi)
+
+### 15 Temmuz 2026 - Mobil UX: Dikey Akışlı Açılır Form Kararı
+- **Karar:** Farklı mobil tarayıcılardaki (iOS Safari vb.) viewport ve klavye uyumsuzlukları nedeniyle "Bottom-Sheet" (Alt Çekmece) tasarımı iptal edildi. Yerine, haritanın dikey akışta üstte sabit kaldığı, formun ise haritanın altında pürüzsüzce (height transition ile) açılıp kapandığı kararlı dikey yerleşim yapısına geçilmesi kabul edildi.
+- **İlişkili Dosyalar:**
+  - `src/components/map-card-creator.js` (Güncellendi)
